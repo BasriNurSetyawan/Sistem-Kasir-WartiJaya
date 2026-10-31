@@ -1,9 +1,9 @@
 import mysql.connector
 
 DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",
-    "password": "",
+    "host": "mysql-2e657e80-setyawanwawan747-d251.d.aivencloud.com",
+    "user": "avnadmin",
+    "password": "AVNS_wAGTC6uWp2Gi3mJ2DEp",
     "database": "toserba_wartijaya_db"
 }
 
