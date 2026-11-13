@@ -1,4 +1,4 @@
-# Toko Xwarti API
+# Sistem Kasir Toko Warti Jaya
 
 API Flask sederhana untuk mengelola barang, mencatat transaksi, dan membuat prediksi penjualan harian dengan Single Exponential Smoothing (SES).
 
@@ -38,11 +38,11 @@ Jalankan perintah berikut dari direktori akar proyek. `Dockerfile` menggunakan a
 ```powershell
 Copy-Item .env.example .env
 # Ubah seluruh nilai rahasia di .env sebelum menjalankan container.
-docker build -t toko-xwarti-api .
-docker run --env-file .env -p 5000:5000 toko-xwarti-api
+docker build -t toko-warti-jaya .
+docker run --env-file .env -p 5000:5000 toko-warti-jaya
 ```
 
-Database SQLite dibuat sebagai `toko_xwarti.db` di dalam container dan migrasi dijalankan saat container mulai. Untuk mempertahankan data setelah container dihapus, mount volume ke `/app/toko_xwarti.db` atau gunakan database persisten terkelola.
+Database SQLite dibuat sebagai `toko_warti_jaya.db` di dalam container dan migrasi dijalankan saat container mulai. Untuk mempertahankan data setelah container dihapus, mount volume ke `/app/toko_warti_jaya.db` atau gunakan database persisten terkelola.
 
 ## Endpoint
 
@@ -80,7 +80,7 @@ Contoh membuat barang:
 - `PORT`: port server; default `7860` untuk lokal dan `5000` di Docker.
 - `BUSINESS_TIMEZONE`: zona waktu untuk tanggal transaksi, rekap, dan prediksi; default `Asia/Jakarta`.
 - `DATABASE_URL`: URI database SQLAlchemy opsional; default SQLite di akar proyek.
-- SQLite menggunakan file `toko_xwarti.db` di akar proyek. Perubahan skema dikelola dengan Flask-Migrate; jalankan `flask --app app.run db upgrade` setelah checkout versi baru.
+- SQLite menggunakan file `toko_warti_jaya.db` di akar proyek. Perubahan skema dikelola dengan Flask-Migrate; jalankan `flask --app app.run db upgrade` setelah checkout versi baru.
 - Prediksi SES mengisi hari tanpa penjualan sebagai nilai nol sampai tanggal sekarang; `alpha` harus lebih dari `0` dan paling tinggi `1`.
 - Saat migrasi pertama, transaksi lama diberi snapshot harga barang yang berlaku sekarang. Karena harga historis belum tersimpan sebelumnya, penghasilan sebelum migrasi merupakan estimasi memakai harga barang saat migrasi, bukan rekonstruksi harga saat transaksi.
 

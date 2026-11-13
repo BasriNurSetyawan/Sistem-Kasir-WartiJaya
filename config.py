@@ -9,7 +9,7 @@ load_dotenv(BASE_DIR / '.env')
 class Config:
     # SQLite untuk penggunaan lokal; URI dapat diganti melalui environment.
     SQLALCHEMY_DATABASE_URI = os.environ.get(
-        'DATABASE_URL', f"sqlite:///{BASE_DIR / 'toko_xwarti.db'}"
+        'DATABASE_URL', f"sqlite:///{BASE_DIR / 'toko_warti_jaya.db'}"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Set a persistent secret in the environment for deployments.

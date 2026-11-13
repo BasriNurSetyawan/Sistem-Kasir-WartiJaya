@@ -172,7 +172,9 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(self.client.get('/').status_code, 302)
         self.login_ui('admin-test', 'Admin-test-password-123!')
         for path in ('/', '/barang', '/transaksi', '/rekap', '/belanja', '/prediksi', '/pengguna'):
-            self.assertEqual(self.client.get(path).status_code, 200, path)
+            page = self.client.get(path)
+            self.assertEqual(page.status_code, 200, path)
+            self.assertIn(b'Toko Warti Jaya', page.data, path)
         token_match = re.search(rb'name="csrf_token" value="([^"]+)"', self.client.get('/barang').data)
         csrf = token_match.group(1).decode()
         created = self.client.post('/barang', data={
