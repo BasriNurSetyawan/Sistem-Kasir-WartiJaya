@@ -7,6 +7,7 @@ from pathlib import Path
 from app import create_app, db
 from app.business_time import business_today
 from app.models import Barang, DetailBelanja, Pengguna, RekapBelanja
+from app.services.peramalan_penjualan import proyeksikan_permintaan
 from werkzeug.security import generate_password_hash
 
 
@@ -130,6 +131,82 @@ class ApiTestCase(unittest.TestCase):
         }, headers=self.headers)
         self.assertEqual(future.status_code, 400)
 
+    def test_restock_forecast_uses_daily_history_and_current_stock(self):
+        item_id = self.create_item(stock=50, name='Beras')
+        today = business_today()
+        for offset in range(6, -1, -1):
+            response = self.client.post('/api/transaksi', json={
+                'barang_id': item_id,
+                'jumlah_terjual': 2,
+                'tanggal': (today - timedelta(days=offset)).isoformat(),
+            }, headers=self.headers)
+            self.assertEqual(response.status_code, 201, response.json)
+        with self.app.app_context():
+            item = db.session.get(Barang, item_id)
+            item.stok = 2
+            db.session.commit()
+
+        plan = self.client.get('/api/prediksi/restok', headers=self.headers)
+        self.assertEqual(plan.status_code, 200, plan.json)
+        self.assertEqual(plan.json['periode']['jumlah_hari'], 7)
+        self.assertEqual(plan.json['periode']['mulai'], (today + timedelta(days=1)).isoformat())
+        result = next(row for row in plan.json['barang'] if row['barang_id'] == item_id)
+        self.assertEqual(result['total_terjual_28_hari'], 14)
+        self.assertEqual(result['prediksi_penjualan'], 14)
+        self.assertEqual(result['stok_saat_ini'], 2)
+        self.assertEqual(result['rekomendasi_restock'], 12)
+        self.assertEqual(result['status'], 'perlu_restock')
+
+        single = self.client.get(
+            f'/api/prediksi/{item_id}', headers=self.headers
+        )
+        self.assertEqual(single.status_code, 200, single.json)
+        self.assertEqual(single.json['prediksi_penjualan'], 14)
+        self.assertNotIn('alpha', single.json)
+
+        with self.app.app_context():
+            db.session.get(Barang, item_id).stok = 20
+            db.session.commit()
+        enough_stock = self.client.get('/api/prediksi/restok', headers=self.headers)
+        item = next(row for row in enough_stock.json['barang'] if row['barang_id'] == item_id)
+        self.assertEqual(item['rekomendasi_restock'], 0)
+        self.assertEqual(item['status'], 'stok_cukup')
+
+    def test_restock_forecast_fills_days_without_transactions_with_zero(self):
+        item_id = self.create_item(stock=2, name='Gula')
+        today = business_today()
+        sale = self.client.post('/api/transaksi', json={
+            'barang_id': item_id,
+            'jumlah_terjual': 2,
+            'tanggal': (today - timedelta(days=2)).isoformat(),
+        }, headers=self.headers)
+        self.assertEqual(sale.status_code, 201, sale.json)
+        plan = self.client.get('/api/prediksi/restok', headers=self.headers)
+        item = next(row for row in plan.json['barang'] if row['barang_id'] == item_id)
+        self.assertEqual(item['hari_histori'], 3)
+        self.assertEqual(item['total_terjual_28_hari'], 2)
+        self.assertEqual(item['rata_rata_harian'], '0.67')
+        self.assertEqual(item['prediksi_penjualan'], 5)
+        self.assertTrue(item['histori_terbatas'])
+
+    def test_restock_plan_marks_items_without_recent_sales(self):
+        item_id = self.create_item(stock=0, name='Produk baru')
+        response = self.client.get('/api/prediksi/restok', headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.json)
+        item = next(row for row in response.json['barang'] if row['barang_id'] == item_id)
+        self.assertEqual(item['status'], 'tanpa_data_terbaru')
+        self.assertIsNone(item['rekomendasi_restock'])
+        self.assertEqual(response.json['jumlah_barang_direstok'], 0)
+
+    def test_demand_projection_rounds_restock_need_up(self):
+        average, forecast = proyeksikan_permintaan([1, 0, 2], 3)
+        self.assertEqual(average, Decimal(1))
+        self.assertEqual(forecast, 3)
+        _, rounded_up = proyeksikan_permintaan([1, 0], 3)
+        self.assertEqual(rounded_up, 2)
+        with self.assertRaises(ValueError):
+            proyeksikan_permintaan([], 7)
+
     def test_api_product_crud_preserves_sales_history(self):
         item_id = self.create_item(stock=4)
         updated = self.client.put(f'/api/barang/{item_id}', json={
@@ -175,6 +252,7 @@ class ApiTestCase(unittest.TestCase):
             page = self.client.get(path)
             self.assertEqual(page.status_code, 200, path)
             self.assertIn(b'Toko Warti Jaya', page.data, path)
+        self.assertNotIn(b'name="alpha"', self.client.get('/prediksi').data)
         token_match = re.search(rb'name="csrf_token" value="([^"]+)"', self.client.get('/barang').data)
         csrf = token_match.group(1).decode()
         created = self.client.post('/barang', data={

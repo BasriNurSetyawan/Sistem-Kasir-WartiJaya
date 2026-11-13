@@ -1,6 +1,6 @@
 # Sistem Kasir Toko Warti Jaya
 
-API Flask sederhana untuk mengelola barang, mencatat transaksi, dan membuat prediksi penjualan harian dengan Single Exponential Smoothing (SES).
+Sistem kasir berbasis Flask untuk mengelola barang, mencatat transaksi, menyajikan rekap penjualan, dan membantu perencanaan restok berdasarkan histori penjualan harian.
 
 ## Menjalankan secara lokal
 
@@ -27,7 +27,7 @@ UI tersedia di `http://localhost:7860/` dan memakai login username/kata sandi. A
 - `app/services/`: aturan bisnis katalog, transaksi, rekap, dan prediksi.
 - `app/repositories/`: query serta perubahan data database.
 - `app/models.py`: model tabel dan constraint database.
-- `app/services/prediksi_ses.py`: algoritma Single Exponential Smoothing dan MAPE.
+- `app/services/peramalan_penjualan.py`: proyeksi kebutuhan dari rata-rata penjualan harian.
 - `app/importers/`: pembaca format workbook eksternal.
 - `migrations/`: riwayat perubahan skema database.
 
@@ -56,7 +56,8 @@ Semua endpoint memakai awalan `/api`.
 | `DELETE` | `/barang/<barang_id>` | Menghapus barang tanpa riwayat transaksi |
 | `POST` | `/transaksi` | Mencatat penjualan (`barang_id`, `jumlah_terjual`, opsional `tanggal` berformat `YYYY-MM-DD`) |
 | `GET` | `/rekap/harian?dari=YYYY-MM-DD&sampai=YYYY-MM-DD` | Rekap jumlah transaksi, unit terjual, dan penghasilan per hari |
-| `GET` | `/prediksi/<barang_id>?alpha=0.3` | Prediksi penjualan untuk periode berikutnya |
+| `GET` | `/prediksi/restok` | Rekomendasi restok semua barang untuk 7 hari berikutnya |
+| `GET` | `/prediksi/<barang_id>` | Prediksi dan rekomendasi restok untuk satu barang |
 | `GET` | `/belanja/rekap?page=1&per_page=20` | Daftar baris rekap nota belanja |
 | `GET` | `/belanja/detail?page=1&per_page=20` | Daftar rincian barang belanja dan penanda kemungkinan duplikat |
 
@@ -81,7 +82,8 @@ Contoh membuat barang:
 - `BUSINESS_TIMEZONE`: zona waktu untuk tanggal transaksi, rekap, dan prediksi; default `Asia/Jakarta`.
 - `DATABASE_URL`: URI database SQLAlchemy opsional; default SQLite di akar proyek.
 - SQLite menggunakan file `toko_warti_jaya.db` di akar proyek. Perubahan skema dikelola dengan Flask-Migrate; jalankan `flask --app app.run db upgrade` setelah checkout versi baru.
-- Prediksi SES mengisi hari tanpa penjualan sebagai nilai nol sampai tanggal sekarang; `alpha` harus lebih dari `0` dan paling tinggi `1`.
+- Prediksi restok memakai rata-rata harian dari penjualan dalam 28 hari kalender terakhir, lalu memproyeksikan kebutuhan 7 hari berikutnya. Hari tanpa transaksi dalam rentang histori yang tersedia dihitung nol. Rekomendasi jumlah restok adalah nilai maksimum antara nol dan prediksi kebutuhan dikurangi stok saat ini.
+- Prediksi tidak dapat memperhitungkan waktu tunggu pemasok, stok pengaman, hari toko tutup, atau penjualan yang tidak tercatat. Barang tanpa transaksi dalam 28 hari terakhir ditandai untuk evaluasi manual.
 - Saat migrasi pertama, transaksi lama diberi snapshot harga barang yang berlaku sekarang. Karena harga historis belum tersimpan sebelumnya, penghasilan sebelum migrasi merupakan estimasi memakai harga barang saat migrasi, bukan rekonstruksi harga saat transaksi.
 
 ## Pengujian

@@ -24,6 +24,10 @@ def list_items(page, per_page):
     )
 
 
+def list_all_items():
+    return db.session.scalars(db.select(Barang).order_by(Barang.nama_barang)).all()
+
+
 def update_item(item_id, values):
     item = db.session.get(Barang, item_id)
     if item is None:

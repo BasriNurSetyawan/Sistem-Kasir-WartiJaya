@@ -27,6 +27,7 @@ class Transaksi(db.Model):
     __table_args__ = (
         db.CheckConstraint('jumlah_terjual > 0', name='ck_transaksi_jumlah_positive'),
         db.CheckConstraint('harga_satuan >= 0', name='ck_transaksi_harga_nonnegative'),
+        db.Index('ix_transaksi_tanggal_barang', 'tanggal', 'barang_id'),
     )
 
 

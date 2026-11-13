@@ -1,7 +1,29 @@
 {% extends 'base.html' %}
-{% block title %}Prediksi{% endblock %}
+{% block title %}Prediksi &amp; Restok{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">PERENCANAAN STOK</span><h1>Prediksi penjualan</h1><p>Peramalan harian menggunakan Single Exponential Smoothing.</p></div></div>
-<section class="panel form-panel prediction-form"><form method="post" class="filter-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Barang<select name="barang_id" required><option value="">Pilih barang</option>{% for item in items %}<option value="{{ item.id }}">{{ item.nama_barang }}</option>{% endfor %}</select></label><label>Alpha<input type="number" name="alpha" min="0.01" max="1" step="0.01" value="0.30" required></label><button class="button primary" type="submit">Hitung prediksi</button></form></section>
-{% if result %}<section class="panel prediction-result"><div class="panel-heading"><div><h2>{{ result.nama_barang }}</h2><p>Prediksi periode berikutnya · alpha {{ result.parameter_alpha }}</p></div><span class="eyebrow">SES</span></div><div class="prediction-number"><span>Prediksi penjualan</span><strong>{{ result.prediksi_penjualan_besok }} <small>unit</small></strong></div><div class="stat-grid compact-stats"><article class="stat-card"><div class="stat-top"><span>Hari aktif transaksi</span></div><strong>{{ result.total_hari_transaksi }}</strong></article><article class="stat-card"><div class="stat-top"><span>MAPE</span></div><strong>{{ result.mape }}%</strong><small>Persentase kesalahan absolut rata-rata</small></article></div></section>{% endif %}
+<div class="page-heading"><div><span class="eyebrow">PERENCANAAN STOK</span><h1>Prediksi &amp; rekomendasi restok</h1><p>Perkiraan kebutuhan barang untuk periode berikutnya, berdasarkan penjualan harian di database.</p></div></div>
+{% if plan %}
+<section class="stat-grid">
+  <article class="stat-card"><div class="stat-top"><span>Periode prediksi</span><span class="stat-icon blue">7H</span></div><strong>{{ plan.periode.mulai }}</strong><small>sampai {{ plan.periode.sampai }}</small></article>
+  <article class="stat-card"><div class="stat-top"><span>Barang perlu restok</span><span class="stat-icon amber">!</span></div><strong>{{ plan.jumlah_barang_direstok }}</strong><small>barang dengan kebutuhan di atas stok sekarang</small></article>
+  <article class="stat-card"><div class="stat-top"><span>Total rekomendasi restok</span><span class="stat-icon green">+</span></div><strong>{{ plan.total_unit_restock }} <small>unit</small></strong><small>untuk memenuhi proyeksi 7 hari</small></article>
+</section>
+<section class="panel">
+  <div class="panel-heading"><div><h2>Rencana kebutuhan barang</h2><p>Prediksi 7 hari dibandingkan dengan stok tersedia saat ini.</p></div></div>
+  {% if plan.barang %}
+  <div class="table-wrap"><table><thead><tr><th>Barang</th><th>Stok saat ini</th><th>Terjual 28 hari</th><th>Rata-rata / hari</th><th>Prediksi 7 hari</th><th>Rekomendasi restok</th><th>Status</th></tr></thead>
+    <tbody>{% for row in plan.barang %}<tr>
+      <td><b>{{ row.nama_barang }}</b></td>
+      <td>{{ row.stok_saat_ini }} unit</td>
+      <td>{{ row.total_terjual_28_hari }} unit <small>({{ row.hari_histori }} hari histori)</small></td>
+      <td>{% if row.rata_rata_harian is not none %}{{ row.rata_rata_harian }} unit{% else %}—{% endif %}</td>
+      <td>{% if row.prediksi_penjualan is not none %}{{ row.prediksi_penjualan }} unit{% else %}—{% endif %}</td>
+      <td>{% if row.rekomendasi_restock is not none %}<b class="{{ 'amount' if row.rekomendasi_restock > 0 else '' }}">{{ row.rekomendasi_restock }} unit</b>{% else %}—{% endif %}</td>
+      <td>{% if row.status == 'perlu_restock' %}<span class="status-pill warning">Perlu restok</span>{% elif row.status == 'stok_cukup' %}<span class="status-pill">Stok cukup</span>{% else %}<span class="status-pill warning">Tidak ada penjualan 28 hari</span>{% endif %}{% if row.histori_terbatas and row.status != 'tanpa_data_terbaru' %}<br><small>Histori masih terbatas</small>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty-state"><span>▤</span><b>Belum ada barang</b><p>Tambahkan barang ke katalog untuk melihat rencana restok.</p></div>{% endif %}
+</section>
+<section class="panel"><div class="panel-heading"><div><h2>Cara membaca rekomendasi</h2><p>{{ plan.metode }}. Hari tanpa transaksi dalam rentang histori yang tersedia dihitung nol.</p></div></div><p class="muted">Jumlah restok dihitung dari prediksi penjualan 7 hari dikurangi stok saat ini, dengan nilai minimum nol. Barang tanpa transaksi dalam 28 hari terakhir ditandai agar diperiksa manual. Perhitungan ini belum memasukkan waktu tunggu pemasok, stok pengaman, atau transaksi yang tidak tercatat.</p></section>
+{% endif %}
 {% endblock %}

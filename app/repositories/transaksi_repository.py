@@ -50,12 +50,14 @@ def daily_rows(start, until):
      .group_by(Transaksi.tanggal).all()
 
 
-def daily_sales_for_item(item_id):
+def daily_sales_for_period(start, until):
     return db.session.query(
+        Transaksi.barang_id,
         Transaksi.tanggal,
         func.sum(Transaksi.jumlah_terjual).label('total_harian'),
-    ).filter(Transaksi.barang_id == item_id) \
-     .group_by(Transaksi.tanggal).order_by(Transaksi.tanggal).all()
+    ).filter(Transaksi.tanggal.between(start, until)) \
+     .group_by(Transaksi.barang_id, Transaksi.tanggal) \
+     .order_by(Transaksi.barang_id, Transaksi.tanggal).all()
 
 
 def latest_sales(limit=8):

@@ -89,13 +89,3 @@ def report_args(args, today, max_days):
     if (until - start).days + 1 > max_days:
         raise ValueError(f'Rentang rekap maksimal {max_days} hari.')
     return start, until
-
-
-def alpha_arg(value):
-    try:
-        alpha = float(value if value is not None else 0.3)
-    except (ValueError, TypeError) as exc:
-        raise ValueError('alpha harus berupa angka antara 0 dan 1 (inklusif).') from exc
-    if alpha != alpha or alpha in (float('inf'), float('-inf')) or not 0 < alpha <= 1:
-        raise ValueError('alpha harus berupa angka antara 0 dan 1 (inklusif).')
-    return alpha

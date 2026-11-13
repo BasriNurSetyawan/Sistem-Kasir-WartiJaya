@@ -12,16 +12,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from app import db
 from app.business_time import business_today
 from app.repositories.transaksi_repository import InsufficientStock, ItemNotFound
-from app.schemas import alpha_arg, integer, new_item, pagination_args, parse_date, report_args
+from app.schemas import integer, new_item, pagination_args, parse_date, report_args
 from app.services import barang_service, belanja_service, rekap_service, transaksi_service
 from app.services import pengguna_service
 from app.repositories.pengguna_repository import get_by_id
-from app.services.prediksi_service import (
-    ForecastRangeTooLong,
-    InsufficientHistory,
-    ItemNotFound as ForecastItemNotFound,
-    forecast,
-)
+from app.services.prediksi_service import restock_plan
 from app.ui import ui_bp
 
 
@@ -329,29 +324,12 @@ def belanja():
     return render_template('belanja.html', summaries=summaries, details=details)
 
 
-@ui_bp.route('/prediksi', methods=['GET', 'POST'])
+@ui_bp.route('/prediksi', methods=['GET'])
 def prediksi():
-    result = None
-    if request.method == 'POST':
-        try:
-            item_id = int(request.form.get('barang_id', ''))
-            alpha = alpha_arg(request.form.get('alpha'))
-            result = forecast(item_id, alpha, business_today())
-        except (ValueError, TypeError) as exc:
-            flash(str(exc) or 'Parameter prediksi tidak valid.', 'error')
-        except ForecastItemNotFound:
-            flash('Barang tidak ditemukan.', 'error')
-        except InsufficientHistory:
-            flash('Data historis belum cukup; diperlukan penjualan pada minimal dua hari berbeda.', 'error')
-        except ForecastRangeTooLong:
-            flash('Rentang data historis terlalu panjang untuk diprediksi.', 'error')
-        except SQLAlchemyError:
-            db.session.rollback()
-            current_app.logger.exception('Gagal menghitung prediksi melalui UI')
-            flash('Prediksi gagal dihitung.', 'error')
     try:
-        items = barang_service.list_items(1, 100).items
+        plan = restock_plan(business_today())
     except SQLAlchemyError:
-        current_app.logger.exception('Gagal memuat pilihan barang untuk prediksi')
-        items = []
-    return render_template('prediksi.html', items=items, result=result)
+        current_app.logger.exception('Gagal menghitung rekomendasi restok melalui UI')
+        plan = None
+        flash('Rekomendasi restok gagal dimuat dari database.', 'error')
+    return render_template('prediksi.html', plan=plan)
