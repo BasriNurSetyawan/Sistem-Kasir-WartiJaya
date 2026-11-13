@@ -1,8 +1,17 @@
+import math
+
+
 def hitung_ses_mape(data_aktual, alpha=0.3):
     """
     Menghitung prediksi Single Exponential Smoothing dan akurasi MAPE.
     data_aktual: List agregasi total penjualan historis per periode (misal: harian).
     """
+    if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(alpha) or not 0 < alpha <= 1:
+        raise ValueError("alpha harus berupa angka antara 0 dan 1 (inklusif).")
+    if any(isinstance(value, bool) or not isinstance(value, (int, float))
+           or not math.isfinite(value) or value < 0 for value in data_aktual):
+        raise ValueError("data_aktual harus berisi angka finite yang tidak negatif.")
+
     n = len(data_aktual)
     if n == 0:
         return 0, 0

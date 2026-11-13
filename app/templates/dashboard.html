@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Ringkasan{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">RINGKASAN HARI INI</span><h1>Selamat datang, {{ current_user.username }}</h1><p>Pantau aktivitas toko dan akses menu yang Anda perlukan.</p></div><a class="button primary" href="{{ url_for('ui.transaksi') }}">＋ Catat transaksi</a></div>
+<section class="stat-grid">
+  <article class="stat-card"><div class="stat-top"><span>Penghasilan hari ini</span><span class="stat-icon green">Rp</span></div><strong>Rp {{ report.total_penghasilan }}</strong><small>Omzet kotor dari transaksi penjualan</small></article>
+  <article class="stat-card"><div class="stat-top"><span>Unit terjual</span><span class="stat-icon blue">▤</span></div><strong>{{ report.jumlah_terjual }}</strong><small>{{ report.total_transaksi }} transaksi hari ini</small></article>
+  <article class="stat-card"><div class="stat-top"><span>Barang terdaftar</span><span class="stat-icon amber">▦</span></div><strong>{{ item_count }}</strong><small>Data pada katalog toko</small></article>
+</section>
+<div class="dashboard-grid">
+  <section class="panel"><div class="panel-heading"><div><h2>Transaksi terbaru</h2><p>Aktivitas penjualan terakhir</p></div><a class="text-link" href="{{ url_for('ui.transaksi') }}">Lihat transaksi →</a></div>
+    {% if recent_sales %}<div class="table-wrap"><table><thead><tr><th>Barang</th><th>Tanggal</th><th>Jumlah</th><th>Harga/unit</th></tr></thead><tbody>{% for sale in recent_sales %}<tr><td><b>{{ sale.barang.nama_barang }}</b></td><td>{{ sale.tanggal.strftime('%d %b %Y') }}</td><td>{{ sale.jumlah_terjual }}</td><td>Rp {{ '%.2f'|format(sale.harga_satuan) }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state"><span>▤</span><b>Belum ada transaksi</b><p>Transaksi penjualan akan muncul di sini.</p></div>{% endif %}
+  </section>
+  <section class="panel"><div class="panel-heading"><div><h2>Rekap belanja terbaru</h2><p>Data nota yang sudah diimpor</p></div><a class="text-link" href="{{ url_for('ui.belanja') }}">Lihat semua →</a></div>
+    {% if purchase_summaries %}<div class="mini-list">{% for row in purchase_summaries %}<div class="mini-row"><div class="mini-icon">▧</div><div class="mini-info"><b>{{ row.outlet }}</b><small>{{ row.keterangan_tanggal }}</small></div><strong>Rp {{ '%.2f'|format(row.total) }}</strong></div>{% endfor %}</div>{% else %}<div class="empty-state"><span>▧</span><b>Belum ada data belanja</b><p>Data nota belanja akan muncul di sini.</p></div>{% endif %}
+  </section>
+</div>
+{% endblock %}

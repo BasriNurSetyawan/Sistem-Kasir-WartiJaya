@@ -1,0 +1,3 @@
+Database migrations for the Toko Xwarti API. Apply with:
+
+    flask --app app.run db upgrade

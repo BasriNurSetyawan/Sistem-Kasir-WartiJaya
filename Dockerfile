@@ -7,8 +7,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY config.py ./config.py
 COPY app/ ./app/
+COPY migrations/ ./migrations/
 
-ENV PORT=7860
-EXPOSE 7860
+RUN useradd --create-home appuser && chown -R appuser:appuser /app
+USER appuser
 
-CMD ["python", "-m", "app.run"]
+ENV PORT=5000
+EXPOSE 5000
+
+CMD ["sh", "-c", "flask --app app.run db upgrade && flask --app app.run bootstrap-admin && waitress-serve --host=0.0.0.0 --port=${PORT:-5000} app.run:app"]

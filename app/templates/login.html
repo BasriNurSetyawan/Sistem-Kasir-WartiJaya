@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Masuk · Toko Xwarti</title><link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="login-page">
+  <div class="login-art"><div class="art-orb orb-one"></div><div class="art-orb orb-two"></div><div class="art-copy"><span class="eyebrow">TOKO XWARTI · OPERASIONAL</span><h1>Semua aktivitas<br>toko, <em>satu tempat.</em></h1><p>Kelola barang, transaksi, rekap penjualan, nota belanja, dan prediksi dengan mudah.</p><div class="art-foot">Sistem kasir dan manajemen toko</div></div></div>
+  <main class="login-panel"><div class="login-card"><a class="brand login-brand" href="#"><span class="brand-mark">X</span><span>Toko <b>Xwarti</b><small>Masuk ke akun Anda</small></span></a>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+    <h2>Selamat datang</h2><p class="muted">Masukkan username dan kata sandi untuk melanjutkan.</p>
+    <form method="post" class="form-stack"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Username<input name="username" autocomplete="username" required autofocus></label><label>Kata sandi<input name="password" type="password" autocomplete="current-password" required></label><button class="button primary full" type="submit">Masuk <span>→</span></button></form>
+    <p class="login-help">Belum memiliki akun? Hubungi administrator toko.</p>
+  </div></main>
+</body>
+</html>

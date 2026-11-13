@@ -6,6 +6,10 @@ __pycache__/
 *.db
 *.sqlite
 *.sqlite3
+*.backup
+.server.*.log
 .pytest_cache/
+.test_tmp/
+.migration_tmp/
 .coverage
 htmlcov/

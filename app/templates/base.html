@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Toko Xwarti{% endblock %} · Toko Xwarti</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('ui.dashboard') }}"><span class="brand-mark">X</span><span>Toko <b>Xwarti</b><small>POS &amp; operasional</small></span></a>
+    <div class="nav-label">MENU UTAMA</div>
+    <nav class="nav">
+      <a class="{{ 'active' if request.endpoint == 'ui.dashboard' else '' }}" href="{{ url_for('ui.dashboard') }}"><span>⌂</span> Ringkasan</a>
+      <a class="{{ 'active' if request.endpoint in ['ui.barang','ui.edit_barang'] else '' }}" href="{{ url_for('ui.barang') }}"><span>▦</span> Barang</a>
+      <a class="{{ 'active' if request.endpoint == 'ui.transaksi' else '' }}" href="{{ url_for('ui.transaksi') }}"><span>＋</span> Transaksi</a>
+      <a class="{{ 'active' if request.endpoint == 'ui.rekap' else '' }}" href="{{ url_for('ui.rekap') }}"><span>▤</span> Rekap penjualan</a>
+      <a class="{{ 'active' if request.endpoint == 'ui.belanja' else '' }}" href="{{ url_for('ui.belanja') }}"><span>▧</span> Nota belanja</a>
+      <a class="{{ 'active' if request.endpoint == 'ui.prediksi' else '' }}" href="{{ url_for('ui.prediksi') }}"><span>⌁</span> Prediksi</a>
+      {% if current_user and current_user.role == 'admin' %}
+      <div class="nav-label nav-spaced">ADMINISTRASI</div>
+      <a class="{{ 'active' if request.endpoint == 'ui.pengguna' else '' }}" href="{{ url_for('ui.pengguna') }}"><span>♙</span> Pengguna</a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="online"><i></i> Sistem aktif</div>
+      <div class="user-chip"><div class="avatar">{{ current_user.username[:1]|upper }}</div><div><b>{{ current_user.username }}</b><small>{{ 'Administrator' if current_user.role == 'admin' else 'Kasir' }}</small></div></div>
+      <form method="post" action="{{ url_for('ui.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="logout" type="submit">Keluar <span>↗</span></button></form>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><div class="mobile-brand"><span class="brand-mark">X</span><b>Toko Xwarti</b></div><span class="top-date">{{ today().strftime('%A, %d %B %Y') }}</span></header>
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+      <footer class="footer">Toko Xwarti <span>·</span> Sistem kasir dan operasional</footer>
+    </div>
+  </main>
+</div>
+</body>
+</html>

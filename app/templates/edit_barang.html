@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}Edit barang{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">KATALOG · EDIT</span><h1>Edit barang</h1><p>Perbarui nama, stok, atau harga produk.</p></div><a class="button secondary" href="{{ url_for('ui.barang') }}">← Kembali</a></div>
+<section class="panel narrow-panel"><form method="post" class="form-stack"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Nama barang<input name="nama_barang" maxlength="100" value="{{ item.nama_barang }}" required></label><div class="form-row"><label>Stok<input type="number" name="stok" min="0" step="1" value="{{ item.stok }}" required></label><label>Harga jual (Rp)<input type="number" name="harga" min="0" step="0.01" value="{{ '%.2f'|format(item.harga) }}" required></label></div><div class="form-actions"><a class="button secondary" href="{{ url_for('ui.barang') }}">Batal</a><button class="button primary" type="submit">Simpan perubahan</button></div></form></section>
+{% endblock %}
