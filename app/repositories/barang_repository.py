@@ -1,5 +1,5 @@
 from app import db
-from app.models import Barang, Transaksi
+from app.models import Barang, DetailTransaksi, Transaksi
 
 
 def create_item(values):
@@ -28,6 +28,16 @@ def list_all_items():
     return db.session.scalars(db.select(Barang).order_by(Barang.nama_barang)).all()
 
 
+def search_items(query, limit=10):
+    escaped_query = query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+    return db.session.scalars(
+        db.select(Barang)
+        .where(Barang.nama_barang.ilike(f'%{escaped_query}%', escape='\\'))
+        .order_by(Barang.nama_barang, Barang.id)
+        .limit(limit)
+    ).all()
+
+
 def update_item(item_id, values):
     item = db.session.get(Barang, item_id)
     if item is None:
@@ -42,7 +52,8 @@ def delete_item(item_id):
     item = db.session.get(Barang, item_id)
     if item is None:
         return False
-    if db.session.query(Transaksi.id).filter_by(barang_id=item_id).first():
+    if (db.session.query(Transaksi.id).filter_by(barang_id=item_id).first()
+            or db.session.query(DetailTransaksi.id).filter_by(barang_id=item_id).first()):
         raise ItemHasSales
     db.session.delete(item)
     db.session.commit()

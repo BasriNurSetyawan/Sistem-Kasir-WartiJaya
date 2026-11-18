@@ -4,7 +4,189 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Toko Warti Jaya{% endblock %} · Toko Warti Jaya</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>
+    /* AI Copilot Widget Styles */
+    .ai-fab-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 28px;
+      z-index: 999;
+      background: linear-gradient(135deg, #13866c, #0e5b49);
+      color: #fff;
+      border: 0;
+      border-radius: 30px;
+      padding: 12px 20px;
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: 0 8px 24px rgba(19, 134, 108, 0.35);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+    .ai-fab-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(19, 134, 108, 0.45);
+    }
+    .ai-drawer {
+      position: fixed;
+      bottom: 84px;
+      right: 28px;
+      width: 400px;
+      max-width: calc(100vw - 40px);
+      height: 580px;
+      max-height: calc(100vh - 110px);
+      background: #fff;
+      border: 1px solid #dce5e1;
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(15, 38, 32, 0.18);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: aiDrawerSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes aiDrawerSlide {
+      from { opacity: 0; transform: translateY(20px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .ai-drawer-header {
+      background: linear-gradient(135deg, #13866c, #0f4f40);
+      color: #fff;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .ai-avatar {
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+    }
+    .ai-close-btn {
+      background: transparent;
+      border: 0;
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .ai-drawer-quick {
+      display: flex;
+      gap: 6px;
+      padding: 10px 14px;
+      background: #f7faf8;
+      border-bottom: 1px solid #eef3f0;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .ai-chip {
+      background: #fff;
+      border: 1px solid #dbe5e0;
+      border-radius: 14px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #3b524c;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .ai-chip:hover {
+      background: #eaf5f0;
+      color: #13866c;
+      border-color: #13866c;
+    }
+    .ai-drawer-body {
+      flex: 1;
+      padding: 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: #fafcfb;
+    }
+    .ai-bubble {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      word-break: break-word;
+      white-space: pre-line;
+    }
+    .ai-bubble.user {
+      align-self: flex-end;
+      background: #13866c;
+      color: #fff;
+      border-bottom-right-radius: 2px;
+    }
+    .ai-bubble.assistant {
+      align-self: flex-start;
+      background: #fff;
+      color: #243538;
+      border: 1px solid #e4eae6;
+      border-bottom-left-radius: 2px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+    .ai-bubble.assistant .ai-source-tag {
+      display: block;
+      margin-top: 6px;
+      font-size: 10px;
+      color: #8c9d99;
+      border-top: 1px solid #f0f3f1;
+      padding-top: 4px;
+    }
+    .ai-drawer-footer {
+      padding: 10px 14px;
+      border-top: 1px solid #eef2f0;
+      display: flex;
+      gap: 8px;
+      background: #fff;
+    }
+    .ai-drawer-footer input {
+      flex: 1;
+      height: 38px;
+      border: 1px solid #dce5e1;
+      border-radius: 8px;
+      padding: 0 12px;
+      font-size: 12px;
+      outline: none;
+    }
+    .ai-drawer-footer input:focus {
+      border-color: #13866c;
+      box-shadow: 0 0 0 2px rgba(19, 134, 108, 0.15);
+    }
+    .ai-drawer-footer button {
+      background: #13866c;
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 14px;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .ai-drawer-footer button:disabled {
+      background: #a3ccc1;
+      cursor: not-allowed;
+    }
+    .ai-typing {
+      align-self: flex-start;
+      font-size: 11px;
+      color: #7b8e8b;
+      font-style: italic;
+      padding: 4px 8px;
+    }
+  </style>
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
 <div class="shell">
@@ -17,14 +199,14 @@
       <a class="{{ 'active' if request.endpoint == 'ui.transaksi' else '' }}" href="{{ url_for('ui.transaksi') }}"><span>＋</span> Transaksi</a>
       <a class="{{ 'active' if request.endpoint == 'ui.rekap' else '' }}" href="{{ url_for('ui.rekap') }}"><span>▤</span> Rekap penjualan</a>
       <a class="{{ 'active' if request.endpoint == 'ui.belanja' else '' }}" href="{{ url_for('ui.belanja') }}"><span>▧</span> Nota belanja</a>
-      <a class="{{ 'active' if request.endpoint == 'ui.prediksi' else '' }}" href="{{ url_for('ui.prediksi') }}"><span>⌁</span> Prediksi</a>
+      <a class="{{ 'active' if request.endpoint == 'ui.prediksi' else '' }}" href="{{ url_for('ui.prediksi') }}"><span>⌁</span> Prediksi AI</a>
       {% if current_user and current_user.role == 'admin' %}
       <div class="nav-label nav-spaced">ADMINISTRASI</div>
       <a class="{{ 'active' if request.endpoint == 'ui.pengguna' else '' }}" href="{{ url_for('ui.pengguna') }}"><span>♙</span> Pengguna</a>
       {% endif %}
     </nav>
     <div class="sidebar-bottom">
-      <div class="online"><i></i> Sistem aktif</div>
+      <div class="online"><i></i> Sistem aktif &middot; AI Siap</div>
       <div class="user-chip"><div class="avatar">{{ current_user.username[:1]|upper }}</div><div><b>{{ current_user.username }}</b><small>{{ 'Administrator' if current_user.role == 'admin' else 'Kasir' }}</small></div></div>
       <form method="post" action="{{ url_for('ui.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="logout" type="submit">Keluar <span>↗</span></button></form>
     </div>
@@ -36,9 +218,159 @@
         {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
       {% endwith %}
       {% block content %}{% endblock %}
-      <footer class="footer">Toko Warti Jaya <span>·</span> Sistem kasir dan operasional</footer>
+      <footer class="footer">Toko Warti Jaya <span>·</span> Sistem Kasir Cerdas &amp; AI Hybrid</footer>
     </div>
   </main>
 </div>
+
+<!-- Floating AI Copilot Trigger -->
+<button id="aiCopilotFab" class="ai-fab-btn" type="button">
+  <span>✨</span>
+  <span>Tanya AI Copilot</span>
+</button>
+
+<!-- AI Copilot Chat Drawer -->
+<div id="aiCopilotModal" class="ai-drawer" style="display:none;">
+  <div class="ai-drawer-header">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div class="ai-avatar">✨</div>
+      <div>
+        <b style="font-size:13px; display:block;">Asisten AI Toko Warti Jaya</b>
+        <small style="opacity:0.85; font-size:10px;">Didukung Google Gemini &amp; Retail ML</small>
+      </div>
+    </div>
+    <button id="aiCloseBtn" class="ai-close-btn" type="button">&times;</button>
+  </div>
+  <div class="ai-drawer-quick">
+    <button type="button" class="ai-chip" data-prompt="Barang apa yang paling mendesak direstok hari ini?">📦 Stok Kritis</button>
+    <button type="button" class="ai-chip" data-prompt="Bagaimana rekap transaksi dan omzet hari ini?">💰 Rekap Hari Ini</button>
+    <button type="button" class="ai-chip" data-prompt="Apa saja produk paling laris dalam 28 hari terakhir?">🔥 Produk Terlaris</button>
+    <button type="button" class="ai-chip" data-prompt="Berapa estimasi total modal yang dibutuhkan untuk restok?">💵 Estimasi Modal</button>
+  </div>
+  <div id="aiChatMessages" class="ai-drawer-body">
+    <div class="ai-bubble assistant">
+      Halo! Saya Asisten AI Toko Warti Jaya. Tanyakan apa saja tentang stok barang, omzet, rekomendasi restok, atau ide promosi toko Anda.
+      <span class="ai-source-tag">Sistem Cerdas Warti Jaya</span>
+    </div>
+  </div>
+  <form id="aiChatForm" class="ai-drawer-footer">
+    <input type="text" id="aiMessageInput" placeholder="Tanyakan inventori, omzet, atau restok..." autocomplete="off" required>
+    <button type="submit" id="aiSendBtn">Kirim</button>
+  </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const fab = document.getElementById('aiCopilotFab');
+  const drawer = document.getElementById('aiCopilotModal');
+  const closeBtn = document.getElementById('aiCloseBtn');
+  const form = document.getElementById('aiChatForm');
+  const input = document.getElementById('aiMessageInput');
+  const msgContainer = document.getElementById('aiChatMessages');
+  const sendBtn = document.getElementById('aiSendBtn');
+  const chips = document.querySelectorAll('.ai-chip');
+  const csrfToken = "{{ csrf_token() }}";
+  let historyLoaded = false;
+
+  if (!fab || !drawer) return;
+
+  fab.addEventListener('click', function () {
+    const isVisible = drawer.style.display !== 'none';
+    drawer.style.display = isVisible ? 'none' : 'flex';
+    if (!isVisible && !historyLoaded) {
+      loadHistory();
+      input.focus();
+    }
+  });
+
+  closeBtn.addEventListener('click', function () {
+    drawer.style.display = 'none';
+  });
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', function () {
+      input.value = this.getAttribute('data-prompt');
+      form.dispatchEvent(new Event('submit'));
+    });
+  });
+
+  function appendMessage(text, role, source) {
+    const div = document.createElement('div');
+    div.className = 'ai-bubble ' + (role === 'user' ? 'user' : 'assistant');
+    div.textContent = text;
+    if (role !== 'user' && source) {
+      const tag = document.createElement('span');
+      tag.className = 'ai-source-tag';
+      tag.textContent = source === 'gemini' ? '✨ Didukung Google Gemini' : '⚡ Analisis Mesin Lokal';
+      div.appendChild(tag);
+    }
+    msgContainer.appendChild(div);
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+  }
+
+  function loadHistory() {
+    fetch('/ai/chat/history', {
+      headers: { 'Accept': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+      historyLoaded = true;
+      if (data.messages && data.messages.length > 0) {
+        msgContainer.innerHTML = '';
+        data.messages.forEach(m => {
+          appendMessage(m.pesan, m.role, m.sumber);
+        });
+      }
+    })
+    .catch(() => { historyLoaded = true; });
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+
+    appendMessage(text, 'user');
+    input.value = '';
+    sendBtn.disabled = true;
+
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'ai-typing';
+    typingDiv.id = 'aiTypingIndicator';
+    typingDiv.textContent = 'Menghubungkan ke AI Toko Warti Jaya...';
+    msgContainer.appendChild(typingDiv);
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+
+    fetch('/ai/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ message: text, csrf_token: csrfToken })
+    })
+    .then(res => res.json())
+    .then(data => {
+      const typing = document.getElementById('aiTypingIndicator');
+      if (typing) typing.remove();
+      sendBtn.disabled = false;
+      if (data.reply) {
+        appendMessage(data.reply, 'assistant', data.source);
+      } else if (data.error) {
+        appendMessage('Maaf, ' + data.error, 'assistant', 'sistem');
+      }
+    })
+    .catch(err => {
+      const typing = document.getElementById('aiTypingIndicator');
+      if (typing) typing.remove();
+      sendBtn.disabled = false;
+      appendMessage('Koneksi terganggu. Silakan coba kembali.', 'assistant', 'sistem');
+    });
+  });
+});
+</script>
+{% block extra_scripts %}{% endblock %}
 </body>
 </html>

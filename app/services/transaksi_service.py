@@ -12,6 +12,14 @@ def record_sale(item_id, quantity, sold_on):
         raise
 
 
+def record_sale_batch(lines, sold_on):
+    try:
+        return transaksi_repository.record_sale_batch(lines, sold_on)
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
+
+
 def latest_sales(limit=8):
     try:
         return transaksi_repository.latest_sales(limit)

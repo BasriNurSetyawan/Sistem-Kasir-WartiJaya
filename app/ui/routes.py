@@ -1,10 +1,11 @@
 from decimal import Decimal, InvalidOperation
+import json
 import hmac
 import secrets
 from functools import wraps
 
 from flask import (
-    abort, current_app, flash, g, redirect, render_template, request, session,
+    abort, current_app, flash, g, jsonify, redirect, render_template, request, session,
     url_for,
 )
 from sqlalchemy.exc import SQLAlchemyError
@@ -17,6 +18,7 @@ from app.services import barang_service, belanja_service, rekap_service, transak
 from app.services import pengguna_service
 from app.repositories.pengguna_repository import get_by_id
 from app.services.prediksi_service import restock_plan
+from app.services import ai_assistant_service
 from app.ui import ui_bp
 
 
@@ -32,7 +34,12 @@ def _csrf_token():
 def protect_ui():
     if request.method == 'POST':
         expected = session.get('_csrf_token', '')
-        supplied = request.form.get('csrf_token', '')
+        json_data = request.get_json(silent=True) or {}
+        supplied = (
+            request.form.get('csrf_token', '')
+            or json_data.get('csrf_token', '')
+            or request.headers.get('X-CSRF-Token', '')
+        )
         if not expected or not supplied or not hmac.compare_digest(expected, supplied):
             abort(400)
     if request.endpoint == 'ui.login':
@@ -264,7 +271,36 @@ def ubah_peran_pengguna(user_id):
 def transaksi():
     if request.method == 'POST':
         try:
+            items_json = request.form.get('items_json', '').strip()
+            if items_json:
+                submitted_lines = json.loads(items_json)
+                if not isinstance(submitted_lines, list) or not submitted_lines or len(submitted_lines) > 100:
+                    raise ValueError('Keranjang harus berisi 1 sampai 100 barang.')
+                lines = []
+                for index, line in enumerate(submitted_lines, 1):
+                    if not isinstance(line, dict):
+                        raise ValueError(f'Baris keranjang {index} tidak valid.')
+                    lines.append({
+                        'barang_id': integer(line.get('barang_id'), 'barang_id', minimum=1),
+                        'jumlah_terjual': integer(line.get('jumlah_terjual'), 'jumlah_terjual', minimum=1),
+                    })
+                sold_on = parse_date(
+                    request.form['tanggal'], 'tanggal'
+                ) if request.form.get('tanggal') else business_today()
+                if sold_on > business_today():
+                    raise ValueError('tanggal tidak boleh berada di masa depan.')
+                remaining = transaksi_service.record_sale_batch(lines, sold_on)
+                flash(
+                    f"Transaksi berhasil untuk {len(remaining)} jenis barang.",
+                    'success',
+                )
+                return redirect(url_for('ui.transaksi'))
+
             item_id = integer(int(request.form.get('barang_id', '')), 'barang_id', minimum=1)
+            selected_name = request.form.get('nama_barang', '').strip()
+            item = barang_service.get_item(item_id)
+            if item is None or item.nama_barang != selected_name:
+                raise ValueError('Pilih barang dari daftar saran yang sesuai.')
             quantity = integer(int(request.form.get('jumlah_terjual', '')), 'jumlah_terjual', minimum=1)
             sold_on = parse_date(request.form['tanggal'], 'tanggal') if request.form.get('tanggal') else business_today()
             if sold_on > business_today():
@@ -284,12 +320,32 @@ def transaksi():
             flash('Transaksi gagal disimpan.', 'error')
 
     try:
-        items = barang_service.list_items(1, 100).items
+        items_available = barang_service.list_items(1, 1).total > 0
         recent_sales = transaksi_service.latest_sales(12)
     except SQLAlchemyError:
         current_app.logger.exception('Gagal memuat transaksi melalui UI')
-        items, recent_sales = [], []
-    return render_template('transaksi.html', items=items, recent_sales=recent_sales)
+        items_available, recent_sales = False, []
+    return render_template('transaksi.html', items_available=items_available, recent_sales=recent_sales)
+
+
+@ui_bp.get('/transaksi/saran-barang')
+def saran_barang_transaksi():
+    query = request.args.get('q', '').strip()
+    if len(query) > 100:
+        return jsonify({'items': []}), 200
+    if not query:
+        return jsonify({'items': []}), 200
+    try:
+        matches = barang_service.search_items(query, limit=10)
+    except SQLAlchemyError:
+        current_app.logger.exception('Gagal mencari barang untuk transaksi')
+        return jsonify({'error': 'Saran barang gagal dimuat.', 'items': []}), 500
+    return jsonify({'items': [{
+        'id': item.id,
+        'nama_barang': item.nama_barang,
+        'stok': item.stok,
+        'harga': str(item.harga),
+    } for item in matches]}), 200
 
 
 @ui_bp.route('/rekap', methods=['GET'])
@@ -328,8 +384,63 @@ def belanja():
 def prediksi():
     try:
         plan = restock_plan(business_today())
+        ai_insight = ai_assistant_service.get_or_generate_inventory_insight(
+            force_refresh=(request.args.get('refresh_ai') == '1')
+        )
+        basket_data = ai_assistant_service.get_market_basket_data()
+        anomalies = ai_assistant_service.get_store_anomalies()
+        clustering_data = ai_assistant_service.get_product_clustering_data()
     except SQLAlchemyError:
         current_app.logger.exception('Gagal menghitung rekomendasi restok melalui UI')
         plan = None
+        ai_insight = None
+        basket_data = None
+        anomalies = []
+        clustering_data = None
         flash('Rekomendasi restok gagal dimuat dari database.', 'error')
-    return render_template('prediksi.html', plan=plan)
+    return render_template(
+        'prediksi.html',
+        plan=plan,
+        ai_insight=ai_insight,
+        basket_data=basket_data,
+        anomalies=anomalies,
+        clustering_data=clustering_data,
+    )
+
+
+@ui_bp.post('/ai/chat')
+def ui_ai_chat():
+    data = request.get_json(silent=True) or request.form
+    message = (data.get('message') or '').strip()
+    if not message:
+        return jsonify({'error': 'Pesan tidak boleh kosong.'}), 400
+    try:
+        response = ai_assistant_service.handle_chat_message(
+            user_id=session.get('user_id'), message_text=message
+        )
+        return jsonify(response), 200
+    except SQLAlchemyError:
+        current_app.logger.exception('Gagal memproses pesan AI chat UI')
+        return jsonify({'error': 'Percakapan AI gagal diproses.'}), 500
+
+
+@ui_bp.get('/ai/chat/history')
+def ui_ai_chat_history():
+    try:
+        history = ai_assistant_service.get_chat_history()
+        return jsonify({'messages': history}), 200
+    except SQLAlchemyError:
+        current_app.logger.exception('Gagal memuat riwayat AI chat UI')
+        return jsonify({'error': 'Riwayat chat gagal dimuat.'}), 500
+
+
+@ui_bp.post('/ai/cross-sell')
+def ui_ai_cross_sell():
+    data = request.get_json(silent=True) or {}
+    cart_item_ids = data.get('cart_item_ids', [])
+    try:
+        suggestions = ai_assistant_service.get_cross_sell_for_cart(cart_item_ids)
+        return jsonify({'suggestions': suggestions}), 200
+    except SQLAlchemyError:
+        current_app.logger.exception('Gagal memuat saran cross-sell UI')
+        return jsonify({'error': 'Saran cross-sell gagal dimuat.'}), 500

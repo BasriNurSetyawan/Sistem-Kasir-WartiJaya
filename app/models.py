@@ -31,6 +31,46 @@ class Transaksi(db.Model):
     )
 
 
+class TransaksiHeader(db.Model):
+    """A cashier checkout that can contain multiple sold products."""
+    __tablename__ = 'transaksi_header'
+    id = db.Column(db.Integer, primary_key=True)
+    tanggal = db.Column(db.Date, nullable=False, default=business_today)
+    dibuat_pada = db.Column(
+        db.DateTime(timezone=True), nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    detail = db.relationship(
+        'DetailTransaksi', back_populates='transaksi', cascade='all, delete-orphan',
+        lazy=True,
+    )
+
+
+class DetailTransaksi(db.Model):
+    """Immutable product/price snapshot for a checkout line."""
+    __tablename__ = 'detail_transaksi'
+    id = db.Column(db.Integer, primary_key=True)
+    transaksi_id = db.Column(
+        db.Integer, db.ForeignKey('transaksi_header.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    barang_id = db.Column(db.Integer, db.ForeignKey('barang.id'), nullable=False)
+    jumlah_terjual = db.Column(db.Integer, nullable=False)
+    harga_satuan = db.Column(db.Numeric(14, 2), nullable=False)
+    __table_args__ = (
+        db.CheckConstraint('jumlah_terjual > 0', name='ck_detail_transaksi_jumlah_positive'),
+        db.CheckConstraint('harga_satuan >= 0', name='ck_detail_transaksi_harga_nonnegative'),
+        db.Index('ix_detail_transaksi_barang', 'barang_id'),
+    )
+
+    transaksi = db.relationship('TransaksiHeader', back_populates='detail')
+    barang = db.relationship('Barang', lazy=True)
+
+    @property
+    def tanggal(self):
+        return self.transaksi.tanggal
+
+
 class RekapBelanja(db.Model):
     __tablename__ = 'rekap_belanja'
     __table_args__ = (
@@ -83,3 +123,29 @@ class Pengguna(db.Model):
     role = db.Column(db.String(20), nullable=False)
     aktif = db.Column(db.Boolean, nullable=False, default=True)
     dibuat_pada = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class AIInsight(db.Model):
+    __tablename__ = 'ai_insight'
+    id = db.Column(db.Integer, primary_key=True)
+    tipe = db.Column(db.String(50), nullable=False)  # 'restok', 'penjualan', 'market_basket', 'anomali'
+    konten = db.Column(db.Text, nullable=False)
+    sumber = db.Column(db.String(50), nullable=False, default='gemini')  # 'gemini' atau 'rule_engine'
+    dibuat_pada = db.Column(
+        db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class AIChatMessage(db.Model):
+    __tablename__ = 'ai_chat_message'
+    id = db.Column(db.Integer, primary_key=True)
+    pengguna_id = db.Column(db.Integer, db.ForeignKey('pengguna.id'), nullable=True)
+    role = db.Column(db.String(20), nullable=False)  # 'user' atau 'assistant'
+    pesan = db.Column(db.Text, nullable=False)
+    sumber = db.Column(db.String(50), nullable=False, default='gemini')
+    dibuat_pada = db.Column(
+        db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+    pengguna = db.relationship('Pengguna', lazy=True)
+

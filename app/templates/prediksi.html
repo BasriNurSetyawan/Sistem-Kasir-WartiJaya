@@ -1,29 +1,366 @@
 {% extends 'base.html' %}
-{% block title %}Prediksi &amp; Restok{% endblock %}
+{% block title %}Prediksi dan Restok{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">PERENCANAAN STOK</span><h1>Prediksi &amp; rekomendasi restok</h1><p>Perkiraan kebutuhan barang untuk periode berikutnya, berdasarkan penjualan harian di database.</p></div></div>
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">HYBRID RETAIL AI &amp; PERENCANAAN STOK</span>
+    <h1>Prediksi &amp; Rekomendasi Restok Cerdas</h1>
+    <p>Kombinasi Machine Learning lokal (Random Forest &amp; SES) serta penalaran bisnis Google Gemini AI.</p>
+  </div>
+  <div>
+    <a href="{{ url_for('ui.prediksi') }}?refresh_ai=1" class="button secondary small">↻ Perbarui Analisis AI</a>
+  </div>
+</div>
+
+{% if ai_insight and ai_insight.insight %}
+<section class="panel" style="border-left: 5px solid #13866c; background: #fafdfc;">
+  <div class="panel-heading" style="margin-bottom: 8px;">
+    <div>
+      <h2 style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 18px;">✨</span> Executive AI Insights (Toko Warti Jaya)
+      </h2>
+      <p>Analisis kondisi inventori dan saran alokasi modal berbasis kecerdasan buatan.</p>
+    </div>
+    <span class="status-pill {% if ai_insight.sumber == 'gemini' %}success{% else %}warning{% endif %}" style="font-size: 11px;">
+      {{ 'Didukung Google Gemini' if ai_insight.sumber == 'gemini' else 'Analisis Mesin Lokal' }}
+    </span>
+  </div>
+  <div style="font-size: 13px; line-height: 1.6; color: #2c3f44; white-space: pre-line;">
+    {{ ai_insight.insight }}
+  </div>
+</section>
+{% endif %}
+
 {% if plan %}
-<section class="stat-grid">
-  <article class="stat-card"><div class="stat-top"><span>Periode prediksi</span><span class="stat-icon blue">7H</span></div><strong>{{ plan.periode.mulai }}</strong><small>sampai {{ plan.periode.sampai }}</small></article>
-  <article class="stat-card"><div class="stat-top"><span>Barang perlu restok</span><span class="stat-icon amber">!</span></div><strong>{{ plan.jumlah_barang_direstok }}</strong><small>barang dengan kebutuhan di atas stok sekarang</small></article>
-  <article class="stat-card"><div class="stat-top"><span>Total rekomendasi restok</span><span class="stat-icon green">+</span></div><strong>{{ plan.total_unit_restock }} <small>unit</small></strong><small>untuk memenuhi proyeksi 7 hari</small></article>
+<section class="stat-grid" style="grid-template-columns: repeat(6, minmax(0, 1fr));">
+  <article class="stat-card">
+    <div class="stat-top"><span>Kebutuhan Restok</span><span class="stat-icon amber">+</span></div>
+    <strong>{{ plan.jumlah_barang_direstok }}</strong>
+    <small>produk perlu restok</small>
+  </article>
+  <article class="stat-card">
+    <div class="stat-top"><span>Stok Kritis (≤2 Hari)</span><span class="stat-icon red" style="background:#fde8e8; color:#c53030;">!</span></div>
+    <strong>{{ plan.jumlah_barang_kritis }}</strong>
+    <small>rawan habis segera</small>
+  </article>
+  <article class="stat-card">
+    <div class="stat-top"><span>Estimasi Modal Restok</span><span class="stat-icon green">Rp</span></div>
+    <strong style="font-size: 17px;">Rp {{ plan.total_anggaran_restok_formatted }}</strong>
+    <small>kebutuhan dana 7 hari</small>
+  </article>
+  <article class="stat-card">
+    <div class="stat-top"><span>MAPE Gabungan</span><span class="stat-icon blue">%</span></div>
+    <strong>{% if plan.mape_gabungan is not none %}{{ plan.mape_gabungan }}%{% else %}—{% endif %}</strong>
+    <small>rerata galat persentase</small>
+  </article>
+  <article class="stat-card">
+    <div class="stat-top"><span>MAE Gabungan</span><span class="stat-icon blue">Δ</span></div>
+    <strong>{% if plan.mae_gabungan is not none %}{{ plan.mae_gabungan }} unit{% else %}—{% endif %}</strong>
+    <small>rerata galat absolut</small>
+  </article>
+  <article class="stat-card">
+    <div class="stat-top"><span>RMSE Gabungan</span><span class="stat-icon blue">√</span></div>
+    <strong>{% if plan.rmse_gabungan is not none %}{{ plan.rmse_gabungan }} unit{% else %}—{% endif %}</strong>
+    <small>akar rerata kuadrat galat</small>
+  </article>
 </section>
+
+{% if anomalies %}
+<section class="panel" style="border-top: 3px solid #f2b54a;">
+  <div class="panel-heading">
+    <div>
+      <h2>⚠️ Peringatan Anomali Inventori &amp; Penjualan</h2>
+      <p>Deteksi dini lonjakan permintaan, penurunan tidak wajar, dan stok yang mengendap.</p>
+    </div>
+    <span class="status-pill warning">{{ anomalies|length }} Anomali Terdeteksi</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Barang</th>
+          <th>Kategori Anomali</th>
+          <th>Tingkat Urgensi</th>
+          <th>Keterangan Sistem</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in anomalies %}
+        <tr>
+          <td><b>{{ a.nama_barang }}</b></td>
+          <td>
+            {% if a.tipe == 'rawan_habis' %}
+              <span class="status-pill warning">⚡ Rawan Habis</span>
+            {% elif a.tipe == 'lonjakan_penjualan' %}
+              <span class="status-pill" style="background:#e0f2fe; color:#0369a1;">📈 Lonjakan Penjualan</span>
+            {% elif a.tipe == 'penjualan_anjlok' %}
+              <span class="status-pill" style="background:#fee2e2; color:#b91c1c;">📉 Penjualan Anjlok</span>
+            {% elif a.tipe == 'dead_stock' %}
+              <span class="status-pill" style="background:#f3f4f6; color:#4b5563;">📦 Dead Stock (Mengendap)</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if a.keparahan == 'tinggi' %}
+              <span style="color:#b91c1c; font-weight:700;">Tinggi (Mendesak)</span>
+            {% elif a.keparahan == 'sedang' %}
+              <span style="color:#d97706; font-weight:600;">Sedang</span>
+            {% else %}
+              <span style="color:#2563eb;">Info</span>
+            {% endif %}
+          </td>
+          <td style="white-space: normal; max-width: 500px;">{{ a.pesan }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
 <section class="panel">
-  <div class="panel-heading"><div><h2>Rencana kebutuhan barang</h2><p>Prediksi 7 hari dibandingkan dengan stok tersedia saat ini.</p></div></div>
-  {% if plan.barang %}
-  <div class="table-wrap"><table><thead><tr><th>Barang</th><th>Stok saat ini</th><th>Terjual 28 hari</th><th>Rata-rata / hari</th><th>Prediksi 7 hari</th><th>Rekomendasi restok</th><th>Status</th></tr></thead>
-    <tbody>{% for row in plan.barang %}<tr>
-      <td><b>{{ row.nama_barang }}</b></td>
-      <td>{{ row.stok_saat_ini }} unit</td>
-      <td>{{ row.total_terjual_28_hari }} unit <small>({{ row.hari_histori }} hari histori)</small></td>
-      <td>{% if row.rata_rata_harian is not none %}{{ row.rata_rata_harian }} unit{% else %}—{% endif %}</td>
-      <td>{% if row.prediksi_penjualan is not none %}{{ row.prediksi_penjualan }} unit{% else %}—{% endif %}</td>
-      <td>{% if row.rekomendasi_restock is not none %}<b class="{{ 'amount' if row.rekomendasi_restock > 0 else '' }}">{{ row.rekomendasi_restock }} unit</b>{% else %}—{% endif %}</td>
-      <td>{% if row.status == 'perlu_restock' %}<span class="status-pill warning">Perlu restok</span>{% elif row.status == 'stok_cukup' %}<span class="status-pill">Stok cukup</span>{% else %}<span class="status-pill warning">Tidak ada penjualan 28 hari</span>{% endif %}{% if row.histori_terbatas and row.status != 'tanpa_data_terbaru' %}<br><small>Histori masih terbatas</small>{% endif %}</td>
-    </tr>{% endfor %}</tbody>
-  </table></div>
-  {% else %}<div class="empty-state"><span>▤</span><b>Belum ada barang</b><p>Tambahkan barang ke katalog untuk melihat rencana restok.</p></div>{% endif %}
+  <div class="panel-heading">
+    <div>
+      <h2>Tren Penjualan Tercatat (28 Hari Terakhir)</h2>
+      <p>Total unit terjual per hari seluruh katalog barang di Toko Warti Jaya.</p>
+    </div>
+  </div>
+  <div style="height:260px; max-width:100%;"><canvas id="salesTrendChart" role="img" aria-label="Grafik tren unit penjualan harian 28 hari"></canvas></div>
 </section>
-<section class="panel"><div class="panel-heading"><div><h2>Cara membaca rekomendasi</h2><p>{{ plan.metode }}. Hari tanpa transaksi dalam rentang histori yang tersedia dihitung nol.</p></div></div><p class="muted">Jumlah restok dihitung dari prediksi penjualan 7 hari dikurangi stok saat ini, dengan nilai minimum nol. Barang tanpa transaksi dalam 28 hari terakhir ditandai agar diperiksa manual. Perhitungan ini belum memasukkan waktu tunggu pemasok, stok pengaman, atau transaksi yang tidak tercatat.</p></section>
+
+<section class="panel">
+  <div class="panel-heading">
+    <div>
+      <h2>Rencana Kebutuhan Barang &amp; Prioritas Restok</h2>
+      <p>Target stok adalah peramalan model (ML/SES) ditambah buffer adaptif dan pembobotan urgensi runout.</p>
+    </div>
+  </div>
+  {% if plan.barang %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Prioritas</th>
+          <th>Barang</th>
+          <th>Stok Saat Ini</th>
+          <th>Terjual 28H</th>
+          <th>Model Terpilih</th>
+          <th>Akurasi (MAPE / MAE / RMSE)</th>
+          <th>Ramalan 7H</th>
+          <th>Buffer</th>
+          <th>Target Stok</th>
+          <th>Saran Restok</th>
+          <th>Estimasi Biaya</th>
+          <th>Risiko &amp; Alasan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in plan.barang %}
+        <tr>
+          <td>
+            {% if row.tier_prioritas == 'P1_KRITIS' %}
+              <span class="status-pill" style="background:#fee2e2; color:#b91c1c; font-weight:800;">P1 · KRITIS</span>
+            {% elif row.tier_prioritas == 'P2_TINGGI' %}
+              <span class="status-pill" style="background:#fef3c7; color:#b45309; font-weight:700;">P2 · TINGGI</span>
+            {% elif row.tier_prioritas == 'P3_SEDANG' %}
+              <span class="status-pill" style="background:#ecfdf5; color:#047857; font-weight:600;">P3 · SEDANG</span>
+            {% elif row.tier_prioritas == 'P5_DEAD_STOCK' %}
+              <span class="status-pill" style="background:#f3f4f6; color:#6b7280;">P5 · DEAD STOCK</span>
+            {% else %}
+              <span class="status-pill" style="background:#f0fdf4; color:#15803d;">P4 · CUKUP</span>
+            {% endif %}
+            {% if row.hari_habis_stok is not none %}
+              <br><small style="color:#d97706; font-weight:600;">Habis ~{{ row.hari_habis_stok }} hari</small>
+            {% endif %}
+          </td>
+          <td><b>{{ row.nama_barang }}</b></td>
+          <td>{{ row.stok_saat_ini }} unit</td>
+          <td>{{ row.total_terjual_28_hari }} unit</td>
+          <td>
+            {{ row.metode_peramalan }}
+            <br><small class="muted">{{ row.alasan_pemilihan_model }}</small>
+          </td>
+          <td>
+            {% if row.mape_persen is not none %}
+              <b>MAPE: {{ row.mape_persen }}%</b>
+            {% else %}
+              <span class="muted">MAPE: —</span>
+            {% endif %}
+            {% if row.mae is not none %}
+              <br><small class="muted">MAE: {{ row.mae }} unit</small>
+            {% endif %}
+            {% if row.rmse is not none %}
+              <br><small class="muted">RMSE: {{ row.rmse }} unit</small>
+            {% endif %}
+            {% if row.jumlah_data_uji is not none and row.jumlah_data_uji > 0 %}
+              <br><small style="color:#0284c7;">({{ row.jumlah_data_uji }} jendela uji)</small>
+            {% endif %}
+          </td>
+          <td>{% if row.prediksi_penjualan is not none %}<b>{{ row.prediksi_penjualan }}</b> unit{% else %}—{% endif %}</td>
+          <td>{{ row.buffer_adaptif }} unit</td>
+          <td>{% if row.stok_target_7_hari is not none %}<b>{{ row.stok_target_7_hari }}</b> unit{% else %}—{% endif %}</td>
+          <td>
+            {% if row.rekomendasi_restock is not none %}
+              <b class="{{ 'amount' if row.rekomendasi_restock > 0 else '' }}" style="font-size:13px;">
+                {{ row.rekomendasi_restock }} unit
+              </b>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if row.estimasi_modal_restok and row.rekomendasi_restock > 0 %}
+              Rp {{ row.estimasi_modal_restok }}
+            {% else %}—{% endif %}
+          </td>
+          <td style="white-space:normal; max-width:280px;">
+            <small>{{ row.alasan_rekomendasi }}</small>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <span>◇</span><b>Belum ada barang</b>
+    <p>Tambahkan barang ke katalog untuk melihat rencana restok.</p>
+  </div>
+  {% endif %}
+</section>
+
+{% if basket_data and basket_data.pasangan_populer %}
+<section class="panel" style="border-top: 3px solid #13866c;">
+  <div class="panel-heading">
+    <div>
+      <h2>🛒 Analisis Pola Belanja &amp; Paket Bundling (Market Basket AI)</h2>
+      <p>Deteksi barang yang sering dibeli bersamaan untuk menyusun paket promosi dan penataan display kasir.</p>
+    </div>
+  </div>
+  <div class="two-col-layout" style="grid-template-columns: 1fr 1fr; margin-bottom: 0;">
+    <div>
+      <h3 style="font-size: 13px; font-weight: 700; margin-bottom: 10px;">Pasangan Produk Paling Sering Dibeli Bersama</h3>
+      <table style="font-size: 12px;">
+        <thead>
+          <tr>
+            <th>Produk A</th>
+            <th>Produk B</th>
+            <th>Frekuensi</th>
+            <th>Lift Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in basket_data.pasangan_populer[:5] %}
+          <tr>
+            <td><b>{{ p.item_a_nama }}</b></td>
+            <td><b>{{ p.item_b_nama }}</b></td>
+            <td>{{ p.frekuensi }} transaksi</td>
+            <td><span class="status-pill success">{{ p.lift }}x</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="background: #f8faf9; padding: 16px; border-radius: 10px; border: 1px solid #e7ece9;">
+      <h3 style="font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #13866c;">💡 Rekomendasi Bundling &amp; Merchandising AI</h3>
+      <div style="font-size: 12px; line-height: 1.6; color: #2e4448; white-space: pre-line;">
+        {{ basket_data.ai_rekomendasi_bundling }}
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if clustering_data and clustering_data.klaster %}
+<section class="panel" style="border-top: 3px solid #2563eb;">
+  <div class="panel-heading">
+    <div>
+      <h2>🧩 Segmentasi Perilaku Produk (K-Means Clustering)</h2>
+      <p>Pengelompokan produk secara otomatis berbasis kecepatan penjualan harian, rasio perputaran stok, dan kontribusi pendapatan 28 hari.</p>
+    </div>
+    <span class="status-pill" style="background:#eff6ff; color:#1d4ed8; font-weight:600;">{{ clustering_data.metode or 'K-Means (k=3)' }}</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Segmen Produk</th>
+          <th>Nama Barang</th>
+          <th>Stok Saat Ini</th>
+          <th>Penjualan 28H</th>
+          <th>Laju Harian</th>
+          <th>Rasio Perputaran</th>
+          <th>Estimasi Omzet 28H</th>
+          <th>Rekomendasi Tindakan Strategis</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in clustering_data.klaster %}
+        <tr>
+          <td>
+            {% if c.klaster_tag == 'FAST_MOVING' %}
+              <span class="status-pill success" style="font-weight:700;">🚀 Fast-Moving</span>
+            {% elif c.klaster_tag == 'STABIL' %}
+              <span class="status-pill" style="background:#e0f2fe; color:#0369a1; font-weight:600;">⚖️ Stabil</span>
+            {% elif c.klaster_tag == 'DEAD_STOCK' %}
+              <span class="status-pill" style="background:#fee2e2; color:#b91c1c; font-weight:700;">📦 Dead Stock</span>
+            {% else %}
+              <span class="status-pill warning">🐌 Slow-Moving</span>
+            {% endif %}
+          </td>
+          <td><b>{{ c.nama_barang }}</b></td>
+          <td>{{ c.stok }} unit</td>
+          <td>{{ c.terjual_28h }} unit</td>
+          <td>{{ c.velocity }} /hari</td>
+          <td>{{ c.turnover }}x</td>
+          <td>Rp {{ "{:,.2f}".format(c.revenue_28h) }}</td>
+          <td style="white-space:normal; max-width:280px;"><small>{{ c.rekomendasi_tindakan }}</small></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-heading">
+    <div><h2>Metode dan Batas Interpretasi</h2><p>{{ plan.metode }}</p></div>
+  </div>
+  <p class="muted">
+    Sistem menggunakan arsitektur Hybrid AI: Random Forest Regressor (fitur lag penjualan, rerata bergerak, hari tanpa transaksi) dibandingkan dengan Single Exponential Smoothing (SES) berbasis evaluasi kronologis non-overlapping. Model machine learning hanya diaktifkan jika membuktikan MAPE/MAE lebih rendah dibandingkan SES. Rekomendasi restok diperkaya dengan skor urgensi kehabisan stok (*days of supply runout*), deteksi anomali inventori, dan analisis keranjang belanja (*market basket association rules*).
+  </p>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if plan %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const points = {{ plan.tren_penjualan | tojson }};
+  const canvas = document.getElementById('salesTrendChart');
+  if (!canvas || !points.length || !window.Chart) return;
+  new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: points.map(point => point.tanggal),
+      datasets: [{
+        label: 'Unit terjual',
+        data: points.map(point => point.unit),
+        borderColor: '#13866c',
+        backgroundColor: 'rgba(19, 134, 108, 0.12)',
+        fill: true,
+        tension: 0.25,
+        pointRadius: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: true } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
+  });
+});
+</script>
 {% endif %}
 {% endblock %}

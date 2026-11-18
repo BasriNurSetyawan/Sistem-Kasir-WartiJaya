@@ -79,6 +79,24 @@ def sale_args(data, today):
     return item_id, quantity, sold_on
 
 
+def sale_batch_args(data, today):
+    lines = data.get('items')
+    if not isinstance(lines, list) or not lines or len(lines) > 100:
+        raise ValueError('items wajib berupa daftar berisi 1 sampai 100 barang.')
+    parsed = []
+    for index, line in enumerate(lines, 1):
+        if not isinstance(line, dict):
+            raise ValueError(f'items[{index}] harus berupa objek.')
+        parsed.append({
+            'barang_id': integer(line.get('barang_id'), f'items[{index}].barang_id', minimum=1),
+            'jumlah_terjual': integer(line.get('jumlah_terjual'), f'items[{index}].jumlah_terjual', minimum=1),
+        })
+    sold_on = parse_date(data['tanggal'], 'tanggal') if 'tanggal' in data else today
+    if sold_on > today:
+        raise ValueError('tanggal tidak boleh berada di masa depan.')
+    return parsed, sold_on
+
+
 def report_args(args, today, max_days):
     until = parse_date(args['sampai'], 'sampai') if 'sampai' in args else today
     start = parse_date(args['dari'], 'dari') if 'dari' in args else until

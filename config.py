@@ -12,6 +12,7 @@ class Config:
         'DATABASE_URL', f"sqlite:///{BASE_DIR / 'toko_warti_jaya.db'}"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {'pool_pre_ping': True}
     # Set a persistent secret in the environment for deployments.
     SECRET_KEY = os.environ.get('SECRET_KEY')
     API_TOKEN = os.environ.get('API_TOKEN')

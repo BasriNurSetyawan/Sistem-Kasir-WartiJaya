@@ -6,8 +6,11 @@ from pathlib import Path
 
 from app import create_app, db
 from app.business_time import business_today
-from app.models import Barang, DetailBelanja, Pengguna, RekapBelanja
-from app.services.peramalan_penjualan import proyeksikan_permintaan
+from app.models import (
+    Barang, DetailBelanja, DetailTransaksi, Pengguna, RekapBelanja,
+    Transaksi, TransaksiHeader,
+)
+from app.services.peramalan_penjualan import peramalkan_ses, proyeksikan_permintaan
 from werkzeug.security import generate_password_hash
 
 
@@ -38,6 +41,11 @@ class ApiTestCase(unittest.TestCase):
             db.session.commit()
         self.client = self.app.test_client()
         self.headers = {'Authorization': f'Bearer {"t" * 40}'}
+
+    def test_health_check_reports_database_status(self):
+        response = self.client.get('/healthz')
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertEqual(response.json, {'status': 'ok', 'database': 'ok'})
 
     def tearDown(self):
         with self.app.app_context():
@@ -131,6 +139,42 @@ class ApiTestCase(unittest.TestCase):
         }, headers=self.headers)
         self.assertEqual(future.status_code, 400)
 
+    def test_cart_sale_creates_header_and_details_atomically(self):
+        first_id = self.create_item(stock=5, name='Beras')
+        second_id = self.create_item(stock=2, name='Minyak')
+
+        rejected = self.client.post('/api/transaksi/cart', json={
+            'items': [
+                {'barang_id': first_id, 'jumlah_terjual': 2},
+                {'barang_id': second_id, 'jumlah_terjual': 3},
+            ],
+        }, headers=self.headers)
+        self.assertEqual(rejected.status_code, 400)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Barang, first_id).stok, 5)
+            self.assertEqual(db.session.get(Barang, second_id).stok, 2)
+            self.assertEqual(TransaksiHeader.query.count(), 0)
+            self.assertEqual(DetailTransaksi.query.count(), 0)
+
+        saved = self.client.post('/api/transaksi/cart', json={
+            'items': [
+                {'barang_id': first_id, 'jumlah_terjual': 2},
+                {'barang_id': second_id, 'jumlah_terjual': 1},
+            ],
+        }, headers=self.headers)
+        self.assertEqual(saved.status_code, 201, saved.json)
+        self.assertEqual(saved.json['jumlah_baris'], 2)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Barang, first_id).stok, 3)
+            self.assertEqual(db.session.get(Barang, second_id).stok, 1)
+            self.assertEqual(TransaksiHeader.query.count(), 1)
+            self.assertEqual(DetailTransaksi.query.count(), 2)
+
+        report = self.client.get('/api/rekap/harian', headers=self.headers)
+        self.assertEqual(report.status_code, 200, report.json)
+        self.assertEqual(report.json['total_transaksi'], 1)
+        self.assertEqual(report.json['jumlah_terjual'], 3)
+
     def test_restock_forecast_uses_daily_history_and_current_stock(self):
         item_id = self.create_item(stock=50, name='Beras')
         today = business_today()
@@ -156,13 +200,19 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(result['stok_saat_ini'], 2)
         self.assertEqual(result['rekomendasi_restock'], 12)
         self.assertEqual(result['status'], 'perlu_restock')
+        self.assertIsNone(plan.json['mape_gabungan'])
+        self.assertEqual(plan.json['jumlah_sampel_mape'], 0)
+        self.assertNotIn('_mape_persen_raw', result)
 
         single = self.client.get(
             f'/api/prediksi/{item_id}', headers=self.headers
         )
         self.assertEqual(single.status_code, 200, single.json)
         self.assertEqual(single.json['prediksi_penjualan'], 14)
-        self.assertNotIn('alpha', single.json)
+        self.assertEqual(single.json['metode_peramalan'], 'Single Exponential Smoothing (SES)')
+        self.assertEqual(single.json['alpha'], '0.01')
+        self.assertIsNone(single.json['mape_persen'])
+        self.assertEqual(single.json['jumlah_data_uji'], 0)
 
         with self.app.app_context():
             db.session.get(Barang, item_id).stok = 20
@@ -186,7 +236,10 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(item['hari_histori'], 3)
         self.assertEqual(item['total_terjual_28_hari'], 2)
         self.assertEqual(item['rata_rata_harian'], '0.67')
-        self.assertEqual(item['prediksi_penjualan'], 5)
+        self.assertEqual(item['prediksi_penjualan'], 7)
+        self.assertEqual(item['alpha'], '0.30')
+        self.assertIsNone(item['mape_persen'])
+        self.assertEqual(item['jumlah_data_uji'], 0)
         self.assertTrue(item['histori_terbatas'])
 
     def test_restock_plan_marks_items_without_recent_sales(self):
@@ -206,6 +259,97 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(rounded_up, 2)
         with self.assertRaises(ValueError):
             proyeksikan_permintaan([], 7)
+
+    def test_ses_uses_default_alpha_when_history_is_too_short_for_tuning(self):
+        result = peramalkan_ses([10, 8, 12, 13], 7)
+        self.assertEqual(result['alpha'], Decimal('0.30'))
+        self.assertEqual(result['status_alpha'], 'default_histori_terbatas')
+        self.assertEqual(result['jumlah_data_latih'], 4)
+        self.assertEqual(result['jumlah_data_uji'], 0)
+        self.assertIsNone(result['mape_persen'])
+        self.assertEqual(result['prediksi_periode'], 78)
+
+    def test_ses_backtest_uses_matching_seven_day_forecast_horizon(self):
+        result = peramalkan_ses([5] * 15, 7)
+        self.assertEqual(result['jumlah_data_uji'], 2)
+        self.assertEqual(result['jumlah_data_uji_mape'], 2)
+        self.assertEqual(result['mape_persen'], Decimal('0'))
+
+    def test_ses_tunes_alpha_only_after_minimum_history_is_available(self):
+        result = peramalkan_ses([10, 8, 12, 13, 11, 9, 12], 7)
+        self.assertEqual(result['status_alpha'], 'terpilih_mape_data_latih')
+        self.assertEqual(result['alpha'], Decimal('0.01'))
+
+    def test_ses_counts_zero_total_backtest_windows_outside_mape(self):
+        result = peramalkan_ses([2] * 7 + [0] * 7, 7)
+        self.assertEqual(result['jumlah_data_uji'], 1)
+        self.assertEqual(result['jumlah_data_uji_nol'], 1)
+        self.assertIsNone(result['mape_persen'])
+
+    def test_api_reports_horizon_aligned_mape_for_complete_history(self):
+        item_id = self.create_item(stock=100, name='Air Mineral')
+        today = business_today()
+        with self.app.app_context():
+            db.session.add_all([
+                Transaksi(
+                    barang_id=item_id,
+                    jumlah_terjual=3,
+                    harga_satuan=Decimal('1500.00'),
+                    tanggal=today - timedelta(days=offset),
+                )
+                for offset in range(28)
+            ])
+            db.session.commit()
+
+        response = self.client.get('/api/prediksi/restok', headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.json)
+        row = next(item for item in response.json['barang'] if item['barang_id'] == item_id)
+        self.assertEqual(row['prediksi_penjualan'], 21)
+        self.assertEqual(row['mape_persen'], '0.00')
+        self.assertEqual(row['jumlah_data_uji'], 15)
+        self.assertEqual(response.json['mape_gabungan'], '0.00')
+        self.assertEqual(response.json['jumlah_sampel_mape'], 15)
+        self.assertEqual(len(response.json['tren_penjualan']), 28)
+        self.assertEqual(row['total_terjual_120_hari'], 84)
+        self.assertEqual(row['buffer_adaptif'], 0)
+        self.assertEqual(row['stok_target_7_hari'], 21)
+        self.assertEqual(row['tingkat_risiko'], 'risiko_rendah')
+
+    def test_ses_adapts_buffer_and_explains_stock_risk(self):
+        result = peramalkan_ses(list(range(1, 29)), 7)
+        self.assertEqual(result['alpha'], Decimal('1'))
+        self.assertEqual(result['prediksi_periode'], 196)
+        self.assertEqual(result['buffer_adaptif'], 28)
+        self.assertEqual(result['status_buffer'], 'berbasis_persentil_galat_75')
+
+        item_id = self.create_item(stock=190, name='Minyak Goreng')
+        today = business_today()
+        with self.app.app_context():
+            db.session.add_all([
+                Transaksi(
+                    barang_id=item_id,
+                    jumlah_terjual=quantity,
+                    harga_satuan=Decimal('18000.00'),
+                    tanggal=today - timedelta(days=27 - index),
+                )
+                for index, quantity in enumerate(range(1, 29))
+            ])
+            db.session.commit()
+
+        response = self.client.get('/api/prediksi/restok', headers=self.headers)
+        row = next(item for item in response.json['barang'] if item['barang_id'] == item_id)
+        self.assertEqual(row['stok_target_7_hari'], 224)
+        self.assertEqual(row['rekomendasi_restock'], 34)
+        self.assertEqual(row['tingkat_risiko'], 'risiko_tinggi')
+        self.assertIn('buffer adaptif 28 unit', row['alasan_rekomendasi'])
+
+    def test_ses_keeps_zero_demand_in_model_but_excludes_it_from_mape(self):
+        result = peramalkan_ses([2, 0, 0], 7)
+        self.assertEqual(result['alpha'], Decimal('0.30'))
+        self.assertIsNone(result['mape_persen'])
+        self.assertEqual(result['jumlah_data_uji_mape'], 0)
+        self.assertEqual(result['jumlah_data_uji'], 0)
+        self.assertEqual(result['prediksi_periode'], 7)
 
     def test_api_product_crud_preserves_sales_history(self):
         item_id = self.create_item(stock=4)
@@ -294,7 +438,7 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(self.client.get('/pengguna').status_code, 403)
         self.assertEqual(self.client.get('/barang/1/edit').status_code, 403)
         sale = self.client.post('/transaksi', data={
-            'csrf_token': csrf, 'barang_id': str(item_id), 'jumlah_terjual': '1',
+            'csrf_token': csrf, 'barang_id': str(item_id), 'nama_barang': 'Susu', 'jumlah_terjual': '1',
             'tanggal': business_today().isoformat(),
         })
         self.assertEqual(sale.status_code, 302)
@@ -318,6 +462,47 @@ class ApiTestCase(unittest.TestCase):
         # The active administrator count stays at one after the guarded change.
         with self.app.app_context():
             self.assertEqual(Pengguna.query.filter_by(role='admin', aktif=True).count(), 1)
+
+    def test_transaction_product_suggestions_require_login_and_match_catalog(self):
+        self.assertEqual(self.client.get('/transaksi/saran-barang?q=kopi').status_code, 302)
+        self.login_ui('admin-test', 'Admin-test-password-123!')
+        available_id = self.create_item(stock=4, name='Kopi Arabika')
+        empty_id = self.create_item(stock=0, name='Kopi Robusta')
+
+        response = self.client.get('/transaksi/saran-barang?q=kOpI')
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertEqual(
+            [item['id'] for item in response.json['items']],
+            [available_id, empty_id],
+        )
+        self.assertEqual(response.json['items'][1]['stok'], 0)
+
+        literal_percent = self.client.get('/transaksi/saran-barang?q=%25')
+        self.assertEqual(literal_percent.json['items'], [])
+
+        page = self.client.get('/transaksi')
+        self.assertIn(b'role="combobox"', page.data)
+        self.assertIn(b'product-suggestions', page.data)
+
+    def test_transaction_rejects_unselected_or_mismatched_product_name(self):
+        item_id = self.create_item(stock=3, name='Teh Melati')
+        self.login_ui('admin-test', 'Admin-test-password-123!')
+        page = self.client.get('/transaksi')
+        csrf = re.search(rb'name="csrf_token" value="([^"]+)"', page.data).group(1).decode()
+
+        for data in (
+            {'barang_id': '', 'nama_barang': 'Teh Melati'},
+            {'barang_id': str(item_id), 'nama_barang': 'Teh Hijau'},
+        ):
+            response = self.client.post('/transaksi', data={
+                'csrf_token': csrf,
+                **data,
+                'jumlah_terjual': '1',
+                'tanggal': business_today().isoformat(),
+            })
+            self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Barang, item_id).stok, 3)
 
 
 if __name__ == '__main__':

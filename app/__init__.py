@@ -1,7 +1,9 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from config import Config
 
 # Inisialisasi ekstensi
@@ -28,6 +30,16 @@ def create_app(test_config=None):
 
     db.init_app(app)
     migrate.init_app(app, db)
+
+    @app.get('/healthz')
+    def health_check():
+        try:
+            db.session.execute(text('SELECT 1'))
+            return jsonify({'status': 'ok', 'database': 'ok'}), 200
+        except SQLAlchemyError:
+            db.session.rollback()
+            app.logger.exception('Health check database gagal')
+            return jsonify({'status': 'error', 'database': 'unavailable'}), 503
 
     # Registrasi Blueprint untuk Routes
     from app.routes import api_bp

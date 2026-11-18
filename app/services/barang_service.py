@@ -29,6 +29,14 @@ def list_items(page, per_page):
         raise
 
 
+def search_items(query, limit=10):
+    try:
+        return barang_repository.search_items(query, limit)
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
+
+
 def update_item(item_id, values):
     try:
         return barang_repository.update_item(item_id, values)
