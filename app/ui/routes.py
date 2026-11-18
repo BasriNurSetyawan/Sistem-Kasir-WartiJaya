@@ -34,13 +34,16 @@ def _csrf_token():
 def protect_ui():
     if request.method == 'POST':
         expected = session.get('_csrf_token', '')
-        json_data = request.get_json(silent=True) or {}
+        json_data = request.get_json(silent=True)
+        if not isinstance(json_data, dict):
+            json_data = {}
         supplied = (
             request.form.get('csrf_token', '')
             or json_data.get('csrf_token', '')
             or request.headers.get('X-CSRF-Token', '')
         )
-        if not expected or not supplied or not hmac.compare_digest(expected, supplied):
+        if (not expected or not isinstance(supplied, str) or not supplied
+                or not hmac.compare_digest(expected, supplied)):
             abort(400)
     if request.endpoint == 'ui.login':
         return None
@@ -411,9 +414,12 @@ def prediksi():
 @ui_bp.post('/ai/chat')
 def ui_ai_chat():
     data = request.get_json(silent=True) or request.form
-    message = (data.get('message') or '').strip()
-    if not message:
-        return jsonify({'error': 'Pesan tidak boleh kosong.'}), 400
+    message = data.get('message')
+    if not isinstance(message, str) or not message.strip():
+        return jsonify({'error': 'Pesan harus berupa teks dan tidak boleh kosong.'}), 400
+    message = message.strip()
+    if len(message) > 2000:
+        return jsonify({'error': 'Pesan maksimal 2000 karakter.'}), 400
     try:
         response = ai_assistant_service.handle_chat_message(
             user_id=session.get('user_id'), message_text=message
@@ -427,7 +433,7 @@ def ui_ai_chat():
 @ui_bp.get('/ai/chat/history')
 def ui_ai_chat_history():
     try:
-        history = ai_assistant_service.get_chat_history()
+        history = ai_assistant_service.get_chat_history(user_id=session.get('user_id'))
         return jsonify({'messages': history}), 200
     except SQLAlchemyError:
         current_app.logger.exception('Gagal memuat riwayat AI chat UI')
@@ -436,8 +442,14 @@ def ui_ai_chat_history():
 
 @ui_bp.post('/ai/cross-sell')
 def ui_ai_cross_sell():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Body harus berupa objek JSON.'}), 400
     cart_item_ids = data.get('cart_item_ids', [])
+    if (not isinstance(cart_item_ids, list) or len(cart_item_ids) > 100
+            or any(isinstance(item_id, bool) or not isinstance(item_id, int) or item_id < 1
+                   for item_id in cart_item_ids)):
+        return jsonify({'error': 'cart_item_ids harus berisi maksimal 100 ID bilangan bulat positif.'}), 400
     try:
         suggestions = ai_assistant_service.get_cross_sell_for_cart(cart_item_ids)
         return jsonify({'suggestions': suggestions}), 200

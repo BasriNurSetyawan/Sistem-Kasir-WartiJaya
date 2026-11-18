@@ -174,11 +174,12 @@ def get_all_receipt_itemsets():
     for tx_id, item_id in details:
         receipts_map[f"h_{tx_id}"].add(item_id)
 
-    # Supplement with daily co-occurrences if checkout headers are limited
+    # Legacy rows do not share a receipt identifier, so treat each as a
+    # separate single-item transaction rather than inventing daily baskets.
     if len([r for r in receipts_map.values() if len(r) > 1]) < 5:
-        legacy = db.session.query(Transaksi.tanggal, Transaksi.barang_id).all()
-        for tgl, item_id in legacy:
-            receipts_map[f"legacy_{tgl}"].add(item_id)
+        legacy = db.session.query(Transaksi.id, Transaksi.barang_id).all()
+        for transaction_id, item_id in legacy:
+            receipts_map[f"legacy_{transaction_id}"].add(item_id)
 
     return list(receipts_map.values())
 

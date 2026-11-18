@@ -23,9 +23,12 @@ def ai_insight_restok():
 def ai_chat():
     try:
         body = json_object()
-        message = body.get('message', '').strip()
-        if not message:
-            return jsonify({'error': 'message wajib diisi.'}), 400
+        message = body.get('message')
+        if not isinstance(message, str) or not message.strip():
+            return jsonify({'error': 'message wajib berupa teks dan tidak boleh kosong.'}), 400
+        message = message.strip()
+        if len(message) > 2000:
+            return jsonify({'error': 'message maksimal 2000 karakter.'}), 400
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
 
@@ -62,8 +65,10 @@ def ai_cross_sell():
     try:
         body = json_object()
         cart_item_ids = body.get('cart_item_ids', [])
-        if not isinstance(cart_item_ids, list):
-            return jsonify({'error': 'cart_item_ids harus berupa list angka ID barang.'}), 400
+        if (not isinstance(cart_item_ids, list) or len(cart_item_ids) > 100
+                or any(isinstance(item_id, bool) or not isinstance(item_id, int) or item_id < 1
+                       for item_id in cart_item_ids)):
+            return jsonify({'error': 'cart_item_ids harus berisi maksimal 100 ID bilangan bulat positif.'}), 400
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
 

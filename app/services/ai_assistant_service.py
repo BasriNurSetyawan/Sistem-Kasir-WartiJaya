@@ -159,6 +159,7 @@ def handle_chat_message(user_id, message_text):
     # Load recent conversation history (last 8 messages)
     history_records = (
         db.session.query(AIChatMessage)
+        .filter(AIChatMessage.pengguna_id == user_id)
         .order_by(AIChatMessage.dibuat_pada.desc())
         .limit(8)
         .all()
@@ -189,10 +190,11 @@ def handle_chat_message(user_id, message_text):
     }
 
 
-def get_chat_history(limit=20):
+def get_chat_history(limit=20, user_id=None):
     """Retrieve chat history for the Copilot interface."""
     records = (
         db.session.query(AIChatMessage)
+        .filter(AIChatMessage.pengguna_id == user_id)
         .order_by(AIChatMessage.dibuat_pada.desc())
         .limit(limit)
         .all()

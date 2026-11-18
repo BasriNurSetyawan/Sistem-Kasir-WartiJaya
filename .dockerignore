@@ -8,6 +8,7 @@ __pycache__/
 *.sqlite
 *.sqlite3
 *.backup
+*.docx
 .server.*.log
 .pytest_cache/
 .test_tmp/

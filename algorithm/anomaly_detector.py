@@ -24,6 +24,10 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
     Returns:
         List[dict]: List of detected anomalies with severity, category, and explanation.
     """
+    if (not isinstance(lookback_days, int) or isinstance(lookback_days, bool)
+            or lookback_days < 1):
+        raise ValueError('lookback_days harus berupa bilangan bulat positif.')
+
     anomalies = []
     recent_7_start = today - timedelta(days=6)
     history_start = today - timedelta(days=lookback_days - 1)

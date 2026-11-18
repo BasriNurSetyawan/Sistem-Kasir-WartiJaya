@@ -22,8 +22,9 @@ def create_app(test_config=None):
         SESSION_COOKIE_SAMESITE='Lax',
         PERMANENT_SESSION_LIFETIME=28_800,
     )
-    if not app.config.get('SECRET_KEY'):
-        raise RuntimeError('SECRET_KEY wajib disetel melalui environment sebelum aplikasi dijalankan.')
+    secret_key = app.config.get('SECRET_KEY')
+    if not isinstance(secret_key, str) or len(secret_key) < 32:
+        raise RuntimeError('SECRET_KEY wajib disetel dengan minimal 32 karakter.')
     token = app.config.get('API_TOKEN')
     if not isinstance(token, str) or len(token) < 32 or not token.isascii():
         raise RuntimeError('API_TOKEN wajib disetel dan minimal 32 karakter.')

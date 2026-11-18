@@ -94,7 +94,7 @@ Contoh membuat barang:
 
 ## Catatan konfigurasi
 
-- `SECRET_KEY`: rahasia aplikasi yang wajib disediakan melalui environment.
+- `SECRET_KEY`: rahasia aplikasi minimal 32 karakter, wajib disediakan melalui environment.
 - `API_TOKEN`: token Bearer minimal 32 karakter; diperlukan pada semua endpoint.
 - `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD`: akun admin awal untuk UI; password minimal 12 karakter.
 - `PORT`: port server; default `7860` untuk lokal dan `5000` di Docker.

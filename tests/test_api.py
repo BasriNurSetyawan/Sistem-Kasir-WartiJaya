@@ -7,7 +7,7 @@ from pathlib import Path
 from app import create_app, db
 from app.business_time import business_today
 from app.models import (
-    Barang, DetailBelanja, DetailTransaksi, Pengguna, RekapBelanja,
+    AIChatMessage, Barang, DetailBelanja, DetailTransaksi, Pengguna, RekapBelanja,
     Transaksi, TransaksiHeader,
 )
 from app.services.peramalan_penjualan import peramalkan_ses, proyeksikan_permintaan
@@ -28,7 +28,7 @@ class ApiTestCase(unittest.TestCase):
         self.database_path = self.temp_dir / f'{self.id().split(".")[-1]}.db'
         self.app = create_app({
             'TESTING': True,
-            'SECRET_KEY': 'test-secret-key',
+            'SECRET_KEY': 'test-secret-key-for-regression-tests-only',
             'API_TOKEN': 't' * 40,
             'SQLALCHEMY_DATABASE_URI': f'sqlite:///{self.database_path}',
         })
@@ -46,6 +46,76 @@ class ApiTestCase(unittest.TestCase):
         response = self.client.get('/healthz')
         self.assertEqual(response.status_code, 200, response.json)
         self.assertEqual(response.json, {'status': 'ok', 'database': 'ok'})
+
+    def test_create_app_rejects_short_secret_key(self):
+        with self.assertRaisesRegex(RuntimeError, 'minimal 32 karakter'):
+            create_app({'SECRET_KEY': 'weak', 'API_TOKEN': 't' * 40})
+
+    def test_ui_rejects_non_string_csrf_token_without_server_error(self):
+        response = self.client.post('/login', json={'csrf_token': [], 'username': 'x'})
+        self.assertEqual(response.status_code, 400)
+
+    def test_ai_chat_rejects_non_text_and_oversized_messages(self):
+        for message in (None, 12, {'text': 'hello'}, 'x' * 2001):
+            response = self.client.post('/api/ai/chat', json={'message': message}, headers=self.headers)
+            self.assertEqual(response.status_code, 400)
+
+    def test_cross_sell_rejects_invalid_cart_ids(self):
+        for cart_item_ids in ([True], [[1]], [-1], [1] * 101):
+            response = self.client.post(
+                '/api/ai/cross-sell', json={'cart_item_ids': cart_item_ids}, headers=self.headers
+            )
+            self.assertEqual(response.status_code, 400)
+
+    def test_cross_sell_ui_rejects_invalid_cart_ids(self):
+        self.login_ui('admin-test', 'Admin-test-password-123!')
+        page = self.client.get('/transaksi')
+        csrf = re.search(rb'name="csrf_token" value="([^"]+)"', page.data).group(1).decode()
+        response = self.client.post('/ai/cross-sell', json={'cart_item_ids': [[1]], 'csrf_token': csrf},
+                                   headers={'X-CSRF-Token': csrf})
+        self.assertEqual(response.status_code, 400)
+
+    def test_cross_sell_dom_rendering_uses_text_nodes(self):
+        source = (Path(__file__).resolve().parents[1] / 'app' / 'static' / 'transaksi.js').read_text()
+        self.assertNotIn('crossSellItems.innerHTML', source)
+        self.assertIn('name.textContent = suggestion.nama_barang', source)
+        self.assertIn('reason.textContent = suggestion.alasan', source)
+
+    def test_legacy_sales_do_not_create_fake_same_day_baskets(self):
+        from app.repositories.transaksi_repository import get_all_receipt_itemsets
+
+        first_id = self.create_item(name='Satu')
+        second_id = self.create_item(name='Dua')
+        with self.app.app_context():
+            db.session.add_all([
+                Transaksi(barang_id=first_id, jumlah_terjual=1, harga_satuan=Decimal('1.00'), tanggal=business_today()),
+                Transaksi(barang_id=second_id, jumlah_terjual=1, harga_satuan=Decimal('1.00'), tanggal=business_today()),
+            ])
+            db.session.commit()
+            baskets = get_all_receipt_itemsets()
+        self.assertIn({first_id}, baskets)
+        self.assertIn({second_id}, baskets)
+        self.assertFalse(any(len(basket) > 1 for basket in baskets))
+
+    def test_ui_chat_history_is_scoped_to_logged_in_user(self):
+        self.login_ui('admin-test', 'Admin-test-password-123!')
+        with self.app.app_context():
+            admin = Pengguna.query.filter_by(username='admin-test').one()
+            cashier = Pengguna.query.filter_by(username='cashier-test').one()
+            db.session.add_all([
+                AIChatMessage(
+                    pengguna_id=admin.id, role='user', pesan='admin-private', sumber='user'
+                ),
+                AIChatMessage(
+                    pengguna_id=cashier.id, role='user', pesan='cashier-private', sumber='user'
+                ),
+            ])
+            db.session.commit()
+        history = self.client.get('/ai/chat/history')
+        self.assertEqual(history.status_code, 200)
+        messages = history.json['messages']
+        self.assertIn('admin-private', [message['pesan'] for message in messages])
+        self.assertNotIn('cashier-private', [message['pesan'] for message in messages])
 
     def tearDown(self):
         with self.app.app_context():

@@ -193,11 +193,18 @@
       if (!res.ok) return;
       const data = await res.json();
       if (data.suggestions && data.suggestions.length > 0) {
-        crossSellItems.innerHTML = data.suggestions.map(s => `
-          <div style="margin-top:4px;">
-            👉 <b>${s.nama_barang}</b> — <span style="color:#647974;">${s.alasan}</span>
-          </div>
-        `).join('');
+        crossSellItems.replaceChildren();
+        for (const suggestion of data.suggestions) {
+          const row = document.createElement('div');
+          row.style.marginTop = '4px';
+          const name = document.createElement('b');
+          name.textContent = suggestion.nama_barang;
+          const reason = document.createElement('span');
+          reason.style.color = '#647974';
+          reason.textContent = suggestion.alasan;
+          row.append('\u{1F449} ', name, ' \u{2014} ', reason);
+          crossSellItems.append(row);
+        }
         crossSellContainer.style.display = 'block';
       } else {
         crossSellContainer.style.display = 'none';

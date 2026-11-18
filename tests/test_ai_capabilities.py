@@ -16,6 +16,10 @@ from app.services import ai_assistant_service, local_nlu_service
 
 
 class RetailAlgorithmsTestCase(unittest.TestCase):
+    def test_anomaly_detector_rejects_nonpositive_lookback(self):
+        with self.assertRaisesRegex(ValueError, 'lookback_days'):
+            detect_sales_anomalies([], {}, date(2026, 11, 19), lookback_days=0)
+
     def test_anomaly_detector_identifies_stockout_and_dead_stock(self):
         today = date(2026, 11, 19)
         items = [
@@ -135,7 +139,7 @@ class LocalNLUServiceAndAiTestCase(unittest.TestCase):
         self.database_path = self.temp_dir / f'{self.id().split(".")[-1]}.db'
         self.app = create_app({
             'TESTING': True,
-            'SECRET_KEY': 'test-ai-secret-key-1234567890',
+            'SECRET_KEY': 'test-ai-secret-key-for-regression-tests-only',
             'API_TOKEN': 'a' * 40,
             'SQLALCHEMY_DATABASE_URI': f'sqlite:///{self.database_path}',
         })
