@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from config import Config
 
 # Inisialisasi ekstensi
@@ -28,6 +29,10 @@ def create_app(test_config=None):
     token = app.config.get('API_TOKEN')
     if not isinstance(token, str) or len(token) < 32 or not token.isascii():
         raise RuntimeError('API_TOKEN wajib disetel dan minimal 32 karakter.')
+    try:
+        ZoneInfo(app.config.get('BUSINESS_TIMEZONE', 'Asia/Jakarta'))
+    except (ZoneInfoNotFoundError, TypeError, ValueError) as exc:
+        raise RuntimeError('BUSINESS_TIMEZONE harus berupa nama zona waktu IANA yang valid.') from exc
 
     db.init_app(app)
     migrate.init_app(app, db)

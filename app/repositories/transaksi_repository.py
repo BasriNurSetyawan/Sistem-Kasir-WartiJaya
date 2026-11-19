@@ -54,7 +54,12 @@ def record_sale_batch(lines, sold_on):
                 db.session.rollback()
                 current = db.session.get(Barang, item_id)
                 raise InsufficientStock(current.stok if current else 0, item_id)
-            remaining_stock[item_id] = items[item_id].stok - quantity
+            # Re-read the value written by the conditional UPDATE. The ORM
+            # object was loaded before reservation and may be stale if another
+            # cashier committed a sale between that read and this update.
+            remaining_stock[item_id] = db.session.scalar(
+                select(Barang.stok).where(Barang.id == item_id)
+            )
 
         header = TransaksiHeader(tanggal=sold_on)
         db.session.add(header)
@@ -176,10 +181,11 @@ def get_all_receipt_itemsets():
 
     # Legacy rows do not share a receipt identifier, so treat each as a
     # separate single-item transaction rather than inventing daily baskets.
-    if len([r for r in receipts_map.values() if len(r) > 1]) < 5:
-        legacy = db.session.query(Transaksi.id, Transaksi.barang_id).all()
-        for transaction_id, item_id in legacy:
-            receipts_map[f"legacy_{transaction_id}"].add(item_id)
+    # Include them regardless of modern receipt volume so the analysis does
+    # not silently omit historical sales from its denominator.
+    legacy = db.session.query(Transaksi.id, Transaksi.barang_id).all()
+    for transaction_id, item_id in legacy:
+        receipts_map[f"legacy_{transaction_id}"].add(item_id)
 
     return list(receipts_map.values())
 

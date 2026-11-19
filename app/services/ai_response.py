@@ -11,11 +11,16 @@ SYSTEM_INSTRUCTION = (
 )
 
 _EMOJI_RANGES = ((0x1F000, 0x1FAFF), (0x2600, 0x27BF), (0xFE00, 0xFE0F), (0x1F1E6, 0x1F1FF))
+_EMOJI_CODEPOINTS = {0x00A9, 0x00AE, 0x203C, 0x2049, 0x2122, 0x2139, 0x3030, 0x303D, 0x3297, 0x3299}
 
 
 def _is_decorative_emoji(char):
     codepoint = ord(char)
-    return char in ('\u200d', '\u20e3') or any(start <= codepoint <= end for start, end in _EMOJI_RANGES)
+    return (
+        char in ('\u200d', '\u20e3')
+        or codepoint in _EMOJI_CODEPOINTS
+        or any(start <= codepoint <= end for start, end in _EMOJI_RANGES)
+    )
 
 
 def clean_response(value):

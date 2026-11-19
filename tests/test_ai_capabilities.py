@@ -15,12 +15,28 @@ from algorithm.ses import peramalkan_ses
 from algorithm.ml_forecast import peramalkan_random_forest
 from app.services import ai_assistant_service, local_nlu_service
 from app.services.ai_response import SYSTEM_INSTRUCTION, clean_response
+from app.importers.rekap_belanja_xlsx import _amount
 
 
 class RetailAlgorithmsTestCase(unittest.TestCase):
+    def test_excel_import_amount_must_fit_database_precision(self):
+        self.assertEqual(_amount('12.30', 'Sheet!A1'), Decimal('12.30'))
+        for value in ('NaN', '-1', '1000000000000.00', '1.001'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                _amount(value, 'Sheet!A1')
+
     def test_anomaly_detector_rejects_nonpositive_lookback(self):
         with self.assertRaisesRegex(ValueError, 'lookback_days'):
             detect_sales_anomalies([], {}, date(2026, 11, 19), lookback_days=0)
+
+    def test_anomaly_detector_scales_recent_average_to_short_lookback(self):
+        today = date(2026, 11, 19)
+        item = {'id': 1, 'nama_barang': 'Susu', 'stok': 1, 'harga': Decimal('5000.00')}
+        anomalies = detect_sales_anomalies(
+            [item], {1: {today: 1}}, today, lookback_days=1
+        )
+        stockout = next(row for row in anomalies if row['tipe'] == 'rawan_habis')
+        self.assertEqual(stockout['metrik']['sisa_hari'], 1.0)
 
     def test_anomaly_detector_identifies_stockout_and_dead_stock(self):
         today = date(2026, 11, 19)
@@ -129,7 +145,7 @@ class RetailAlgorithmsTestCase(unittest.TestCase):
 
 class LocalNLUServiceAndAiTestCase(unittest.TestCase):
     def test_response_cleaner_removes_markdown_and_decorative_emoji(self):
-        cleaned = clean_response('### Halo **Pak** 👋\n\n- Silakan lihat `stok` __hari ini__.')
+        cleaned = clean_response('### Halo **Pak** 👋 ©️\n\n- Silakan lihat `stok` __hari ini__.')
         self.assertEqual(cleaned, 'Halo Pak\n\nSilakan lihat stok hari ini.')
         self.assertNotRegex(cleaned, r'[#*_`]|--')
         self.assertIn('bahasa Indonesia', SYSTEM_INSTRUCTION)

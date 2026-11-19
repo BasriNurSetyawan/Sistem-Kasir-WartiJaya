@@ -13,6 +13,7 @@ NS = {
     'rel': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
 }
 DATE_PATTERN = re.compile(r'\b\d{2}-\d{2}-\d{4}\b')
+MAX_AMOUNT = Decimal('999999999999.99')
 
 
 def _string_table(archive):
@@ -60,12 +61,18 @@ def _sheet_rows(archive, sheet_name, strings):
 
 def _amount(value, location):
     try:
-        amount = Decimal(str(value)).quantize(Decimal('0.01'))
+        amount = Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
         raise ValueError(f'Nilai uang tidak valid pada {location}: {value!r}.') from exc
-    if not amount.is_finite() or amount < 0:
-        raise ValueError(f'Nilai uang harus finite dan tidak negatif pada {location}.')
-    return amount
+    if not amount.is_finite() or amount < 0 or amount > MAX_AMOUNT:
+        raise ValueError(f'Nilai uang harus finite, tidak negatif, dan muat Numeric(14, 2) pada {location}.')
+    try:
+        rounded = amount.quantize(Decimal('0.01'))
+    except InvalidOperation as exc:
+        raise ValueError(f'Nilai uang tidak valid pada {location}: {value!r}.') from exc
+    if rounded != amount:
+        raise ValueError(f'Nilai uang maksimal memiliki dua angka desimal pada {location}.')
+    return rounded
 
 
 def _dates_and_scope(raw):

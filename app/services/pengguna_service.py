@@ -3,6 +3,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
 from app.repositories import pengguna_repository
+from app.repositories.pengguna_repository import LastActiveAdminError
 
 
 def authenticate(username, password):
@@ -33,6 +34,9 @@ def list_users():
 def set_active(user_id, active):
     try:
         return pengguna_repository.set_active(user_id, active)
+    except LastActiveAdminError:
+        db.session.rollback()
+        raise
     except SQLAlchemyError:
         db.session.rollback()
         raise
@@ -41,6 +45,9 @@ def set_active(user_id, active):
 def set_role(user_id, role):
     try:
         return pengguna_repository.set_role(user_id, role)
+    except LastActiveAdminError:
+        db.session.rollback()
+        raise
     except SQLAlchemyError:
         db.session.rollback()
         raise

@@ -16,7 +16,7 @@ from app.repositories.transaksi_repository import InsufficientStock, ItemNotFoun
 from app.schemas import integer, new_item, pagination_args, parse_date, report_args
 from app.services import barang_service, belanja_service, rekap_service, transaksi_service
 from app.services import pengguna_service
-from app.repositories.pengguna_repository import get_by_id
+from app.repositories.pengguna_repository import LastActiveAdminError, get_by_id
 from app.services.prediksi_service import restock_plan
 from app.services import ai_assistant_service
 from app.ui import ui_bp
@@ -245,7 +245,16 @@ def ubah_status_pengguna(user_id):
     if not active and target.role == 'admin' and sum(u.aktif and u.role == 'admin' for u in users) <= 1:
         flash('Sistem harus memiliki minimal satu admin aktif.', 'error')
         return redirect(url_for('ui.pengguna'))
-    pengguna_service.set_active(user_id, active)
+    try:
+        pengguna_service.set_active(user_id, active)
+    except LastActiveAdminError:
+        flash('Sistem harus memiliki minimal satu admin aktif.', 'error')
+        return redirect(url_for('ui.pengguna'))
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Gagal memperbarui status akun')
+        flash('Status akun gagal diperbarui.', 'error')
+        return redirect(url_for('ui.pengguna'))
     flash('Status akun diperbarui.', 'success')
     return redirect(url_for('ui.pengguna'))
 
@@ -265,7 +274,16 @@ def ubah_peran_pengguna(user_id):
     elif target.role == 'admin' and role == 'kasir' and target.aktif and sum(u.aktif and u.role == 'admin' for u in users) <= 1:
         flash('Sistem harus memiliki minimal satu admin aktif.', 'error')
     else:
-        pengguna_service.set_role(user_id, role)
+        try:
+            pengguna_service.set_role(user_id, role)
+        except LastActiveAdminError:
+            flash('Sistem harus memiliki minimal satu admin aktif.', 'error')
+            return redirect(url_for('ui.pengguna'))
+        except SQLAlchemyError:
+            db.session.rollback()
+            current_app.logger.exception('Gagal memperbarui peran akun')
+            flash('Peran akun gagal diperbarui.', 'error')
+            return redirect(url_for('ui.pengguna'))
         flash('Peran akun diperbarui.', 'success')
     return redirect(url_for('ui.pengguna'))
 

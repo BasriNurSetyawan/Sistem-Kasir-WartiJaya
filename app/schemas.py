@@ -3,7 +3,9 @@ from decimal import Decimal, InvalidOperation
 
 from flask import request
 
-MAX_INTEGER = 9_223_372_036_854_775_807
+# SQLAlchemy Integer maps to signed 32-bit INTEGER in MySQL. Keep accepted
+# values within the common SQLite/MySQL storage range for identical behavior.
+MAX_INTEGER = 2_147_483_647
 MAX_PRICE = Decimal('999999999999.99')
 
 

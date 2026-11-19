@@ -1,5 +1,10 @@
 from app import db
 from app.models import Pengguna
+from sqlalchemy import select
+
+
+class LastActiveAdminError(Exception):
+    """Raised when an account change would remove the final active admin."""
 
 
 def get_by_username(username):
@@ -22,18 +27,32 @@ def create_user(username, password_hash, role):
 
 
 def set_active(user_id, active):
-    user = db.session.get(Pengguna, user_id)
+    users = db.session.scalars(
+        select(Pengguna).order_by(Pengguna.id).with_for_update()
+        .execution_options(populate_existing=True)
+    ).all()
+    user = next((candidate for candidate in users if candidate.id == user_id), None)
     if user is None:
         return None
+    if (user.role == 'admin' and user.aktif and not active
+            and sum(candidate.role == 'admin' and candidate.aktif for candidate in users) <= 1):
+        raise LastActiveAdminError
     user.aktif = active
     db.session.commit()
     return user
 
 
 def set_role(user_id, role):
-    user = db.session.get(Pengguna, user_id)
+    users = db.session.scalars(
+        select(Pengguna).order_by(Pengguna.id).with_for_update()
+        .execution_options(populate_existing=True)
+    ).all()
+    user = next((candidate for candidate in users if candidate.id == user_id), None)
     if user is None:
         return None
+    if (user.role == 'admin' and user.aktif and role != 'admin'
+            and sum(candidate.role == 'admin' and candidate.aktif for candidate in users) <= 1):
+        raise LastActiveAdminError
     user.role = role
     db.session.commit()
     return user

@@ -142,6 +142,11 @@ def peramalkan_ses(penjualan_harian, jumlah_hari, *, max_backtest_windows=None):
     if (not isinstance(jumlah_hari, int) or isinstance(jumlah_hari, bool)
             or jumlah_hari <= 0):
         raise ValueError('jumlah_hari harus berupa bilangan bulat positif.')
+    if (max_backtest_windows is not None
+            and (not isinstance(max_backtest_windows, int)
+                 or isinstance(max_backtest_windows, bool)
+                 or max_backtest_windows <= 0)):
+        raise ValueError('max_backtest_windows harus berupa bilangan bulat positif.')
 
     alpha, alpha_status = _select_alpha(penjualan_harian)
     level = _fit_level(penjualan_harian, alpha)

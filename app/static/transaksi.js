@@ -9,6 +9,7 @@
   const addButton = document.getElementById('add-to-cart');
   const cartLines = document.getElementById('cart-lines');
   const cartPayload = document.getElementById('cart-payload');
+  const csrfToken = form?.querySelector('input[name="csrf_token"]')?.value || '';
   if (!form || !input || !selectedId || !listbox || !status || !details
       || !quantityInput || !addButton || !cartLines || !cartPayload) return;
 
@@ -186,7 +187,8 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'X-CSRF-Token': csrfToken
         },
         body: JSON.stringify({ cart_item_ids: itemIds })
       });

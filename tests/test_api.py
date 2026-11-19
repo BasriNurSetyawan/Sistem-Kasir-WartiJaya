@@ -51,6 +51,22 @@ class ApiTestCase(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'minimal 32 karakter'):
             create_app({'SECRET_KEY': 'weak', 'API_TOKEN': 't' * 40})
 
+    def test_create_app_rejects_unknown_business_timezone(self):
+        with self.assertRaisesRegex(RuntimeError, 'BUSINESS_TIMEZONE'):
+            create_app({
+                'SECRET_KEY': 'test-secret-key-for-regression-tests-only',
+                'API_TOKEN': 't' * 40,
+                'BUSINESS_TIMEZONE': 'Invalid/Not_A_Zone',
+            })
+
+    def test_integer_fields_follow_mysql_signed_integer_range(self):
+        too_large = self.client.post('/api/barang', json={
+            'nama_barang': 'Stok melebihi rentang MySQL',
+            'stok': 2_147_483_648,
+            'harga': 1,
+        }, headers=self.headers)
+        self.assertEqual(too_large.status_code, 400)
+
     def test_ui_rejects_non_string_csrf_token_without_server_error(self):
         response = self.client.post('/login', json={'csrf_token': [], 'username': 'x'})
         self.assertEqual(response.status_code, 400)
@@ -74,12 +90,16 @@ class ApiTestCase(unittest.TestCase):
         response = self.client.post('/ai/cross-sell', json={'cart_item_ids': [[1]], 'csrf_token': csrf},
                                    headers={'X-CSRF-Token': csrf})
         self.assertEqual(response.status_code, 400)
+        valid = self.client.post('/ai/cross-sell', json={'cart_item_ids': [1]},
+                                 headers={'X-CSRF-Token': csrf})
+        self.assertEqual(valid.status_code, 200, valid.json)
 
     def test_cross_sell_dom_rendering_uses_text_nodes(self):
         source = (Path(__file__).resolve().parents[1] / 'app' / 'static' / 'transaksi.js').read_text()
         self.assertNotIn('crossSellItems.innerHTML', source)
         self.assertIn('name.textContent = suggestion.nama_barang', source)
         self.assertIn('reason.textContent = suggestion.alasan', source)
+        self.assertIn("'X-CSRF-Token': csrfToken", source)
 
     def test_legacy_sales_do_not_create_fake_same_day_baskets(self):
         from app.repositories.transaksi_repository import get_all_receipt_itemsets
@@ -96,6 +116,34 @@ class ApiTestCase(unittest.TestCase):
         self.assertIn({first_id}, baskets)
         self.assertIn({second_id}, baskets)
         self.assertFalse(any(len(basket) > 1 for basket in baskets))
+
+    def test_legacy_sales_remain_in_basket_analysis_after_modern_receipts_exist(self):
+        from app.repositories.transaksi_repository import get_all_receipt_itemsets
+
+        first_id = self.create_item(name='Beras')
+        second_id = self.create_item(name='Minyak')
+        legacy_id = self.create_item(name='Teh')
+        with self.app.app_context():
+            for _ in range(5):
+                header = TransaksiHeader(tanggal=business_today())
+                db.session.add(header)
+                db.session.flush()
+                db.session.add_all([
+                    DetailTransaksi(
+                        transaksi_id=header.id, barang_id=item_id,
+                        jumlah_terjual=1, harga_satuan=Decimal('1.00'),
+                    )
+                    for item_id in (first_id, second_id)
+                ])
+            db.session.add(Transaksi(
+                barang_id=legacy_id, jumlah_terjual=1,
+                harga_satuan=Decimal('1.00'), tanggal=business_today(),
+            ))
+            db.session.commit()
+            baskets = get_all_receipt_itemsets()
+        self.assertEqual(len(baskets), 6)
+        self.assertIn({first_id, second_id}, baskets)
+        self.assertIn({legacy_id}, baskets)
 
     def test_ui_chat_history_is_scoped_to_logged_in_user(self):
         self.login_ui('admin-test', 'Admin-test-password-123!')
@@ -234,6 +282,8 @@ class ApiTestCase(unittest.TestCase):
         }, headers=self.headers)
         self.assertEqual(saved.status_code, 201, saved.json)
         self.assertEqual(saved.json['jumlah_baris'], 2)
+        self.assertEqual(saved.json['sisa_stok'][str(first_id)], 3)
+        self.assertEqual(saved.json['sisa_stok'][str(second_id)], 1)
         with self.app.app_context():
             self.assertEqual(db.session.get(Barang, first_id).stok, 3)
             self.assertEqual(db.session.get(Barang, second_id).stok, 1)
@@ -355,6 +405,11 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(result['jumlah_data_uji'], 1)
         self.assertEqual(result['jumlah_data_uji_nol'], 1)
         self.assertIsNone(result['mape_persen'])
+
+    def test_ses_rejects_nonpositive_backtest_window_limit(self):
+        for limit in (0, -1, True):
+            with self.subTest(limit=limit), self.assertRaisesRegex(ValueError, 'max_backtest_windows'):
+                peramalkan_ses([1] * 20, 7, max_backtest_windows=limit)
 
     def test_api_reports_horizon_aligned_mape_for_complete_history(self):
         item_id = self.create_item(stock=100, name='Air Mineral')
@@ -536,6 +591,15 @@ class ApiTestCase(unittest.TestCase):
         # The active administrator count stays at one after the guarded change.
         with self.app.app_context():
             self.assertEqual(Pengguna.query.filter_by(role='admin', aktif=True).count(), 1)
+            admin_id = Pengguna.query.filter_by(username='admin-test').one().id
+            from app.repositories.pengguna_repository import LastActiveAdminError
+            from app.services import pengguna_service
+            with self.assertRaises(LastActiveAdminError):
+                pengguna_service.set_active(admin_id, False)
+            with self.assertRaises(LastActiveAdminError):
+                pengguna_service.set_role(admin_id, 'kasir')
+            db.session.expire_all()
+            self.assertTrue(db.session.get(Pengguna, admin_id).aktif)
 
     def test_transaction_product_suggestions_require_login_and_match_catalog(self):
         self.assertEqual(self.client.get('/transaksi/saran-barang?q=kopi').status_code, 302)

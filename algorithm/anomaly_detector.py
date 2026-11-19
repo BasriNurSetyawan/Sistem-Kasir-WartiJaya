@@ -29,7 +29,9 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
         raise ValueError('lookback_days harus berupa bilangan bulat positif.')
 
     anomalies = []
-    recent_7_start = today - timedelta(days=6)
+    recent_days = min(7, lookback_days)
+    recent_start = today - timedelta(days=recent_days - 1)
+    previous_days = lookback_days - recent_days
     history_start = today - timedelta(days=lookback_days - 1)
 
     for item in items:
@@ -38,10 +40,11 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
         stok = item.stok if hasattr(item, 'stok') else item['stok']
         sales_map = daily_sales_by_item.get(item_id, {})
 
-        # Calculate sales in last 7 days vs previous 21 days (or 28 days total)
+        # Compare the recent week (or available shorter range) to the rest of
+        # the configured lookback without assuming it is always 28 days.
         sales_last_7 = sum(
             qty for d, qty in sales_map.items()
-            if recent_7_start <= d <= today
+            if recent_start <= d <= today
         )
         sales_total_28 = sum(
             qty for d, qty in sales_map.items()
@@ -49,8 +52,11 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
         )
         sales_prev_21 = max(0, sales_total_28 - sales_last_7)
 
-        avg_daily_7 = sales_last_7 / 7.0
-        avg_daily_prev = sales_prev_21 / 21.0 if sales_prev_21 > 0 else 0.0
+        avg_daily_7 = sales_last_7 / float(recent_days)
+        avg_daily_prev = (
+            sales_prev_21 / float(previous_days)
+            if previous_days > 0 and sales_prev_21 > 0 else 0.0
+        )
         avg_daily_28 = sales_total_28 / float(lookback_days)
 
         # 1. Rawan Habis (Stockout Risk <= 2 days)
@@ -65,7 +71,7 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
                     'keparahan': severity,
                     'pesan': (
                         f"Stok tinggal {stok} unit, diperkirakan habis dalam {days_left:.1f} hari "
-                        f"berdasarkan laju penjualan 7 hari terakhir ({sales_last_7} unit/minggu)."
+                        f"berdasarkan laju penjualan {recent_days} hari terakhir ({sales_last_7} unit)."
                     ),
                     'metrik': {
                         'stok': stok,
@@ -74,7 +80,7 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
                     },
                 })
 
-        # 2. Lonjakan Penjualan (Spike: 7-day average > 2x previous baseline with >= 5 units)
+        # 2. Sales spike: recent average > 2x previous baseline with >= 5 units.
         if sales_last_7 >= 5 and avg_daily_prev > 0 and (avg_daily_7 >= 2.0 * avg_daily_prev):
             increase_pct = ((avg_daily_7 - avg_daily_prev) / avg_daily_prev) * 100
             anomalies.append({
@@ -83,7 +89,7 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
                 'tipe': 'lonjakan_penjualan',
                 'keparahan': 'info',
                 'pesan': (
-                    f"Terjadi lonjakan penjualan sebesar {increase_pct:.0f}% dalam 7 hari terakhir "
+                    f"Terjadi lonjakan penjualan sebesar {increase_pct:.0f}% dalam {recent_days} hari terakhir "
                     f"({sales_last_7} unit vs rata-rata periode sebelumnya)."
                 ),
                 'metrik': {
@@ -94,7 +100,7 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
                 },
             })
 
-        # 3. Penjualan Anjlok (Abrupt drop: previously active >= 10 units in 21 days, but 0 in last 7 days)
+        # 3. Abrupt drop: previously active, but no sales in the recent period.
         if sales_prev_21 >= 10 and sales_last_7 == 0 and stok > 0:
             anomalies.append({
                 'barang_id': item_id,
@@ -102,7 +108,7 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
                 'tipe': 'penjualan_anjlok',
                 'keparahan': 'sedang',
                 'pesan': (
-                    f"Barang tidak terjual sama sekali dalam 7 hari terakhir meskipun stok tersedia ({stok} unit), "
+                    f"Barang tidak terjual sama sekali dalam {recent_days} hari terakhir meskipun stok tersedia ({stok} unit), "
                     f"padahal periode sebelumnya terjual {sales_prev_21} unit. Periksa posisi display atau harga."
                 ),
                 'metrik': {
@@ -112,7 +118,7 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
                 },
             })
 
-        # 4. Dead Stock (Stok > 0 but zero sales across entire 28 days)
+        # 4. Dead stock (stock > 0 but zero sales during the lookback).
         if stok > 0 and sales_total_28 == 0:
             anomalies.append({
                 'barang_id': item_id,
@@ -120,7 +126,7 @@ def detect_sales_anomalies(items, daily_sales_by_item, today, lookback_days=28):
                 'tipe': 'dead_stock',
                 'keparahan': 'sedang' if stok > 10 else 'rendah',
                 'pesan': (
-                    f"Barang mengendap ({stok} unit) tanpa transaksi penjualan selama minimal 28 hari. "
+                    f"Barang mengendap ({stok} unit) tanpa transaksi penjualan selama {lookback_days} hari. "
                     f"Pertimbangkan program bundling atau penyesuaian harga."
                 ),
                 'metrik': {
