@@ -29,17 +29,17 @@
   <article class="stat-card">
     <div class="stat-top"><span>MAPE Gabungan</span><span class="stat-icon blue">%</span></div>
     <strong>{% if plan.mape_gabungan is not none %}{{ plan.mape_gabungan }}%{% else %}—{% endif %}</strong>
-    <small>rerata galat persentase</small>
+    <small>Selisih prediksi dalam persen (makin kecil makin akurat)</small>
   </article>
   <article class="stat-card">
     <div class="stat-top"><span>MAE Gabungan</span><span class="stat-icon blue">Δ</span></div>
     <strong>{% if plan.mae_gabungan is not none %}{{ plan.mae_gabungan }} unit{% else %}—{% endif %}</strong>
-    <small>rerata galat absolut</small>
+    <small>Rata-rata melesetnya jumlah unit barang</small>
   </article>
   <article class="stat-card">
     <div class="stat-top"><span>RMSE Gabungan</span><span class="stat-icon blue">√</span></div>
     <strong>{% if plan.rmse_gabungan is not none %}{{ plan.rmse_gabungan }} unit{% else %}—{% endif %}</strong>
-    <small>akar rerata kuadrat galat</small>
+    <small>Tingkat penyimpangan saat terjadi selisih besar</small>
   </article>
 </section>
 

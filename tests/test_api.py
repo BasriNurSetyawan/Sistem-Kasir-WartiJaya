@@ -526,6 +526,12 @@ class ApiTestCase(unittest.TestCase):
         self.assertNotIn(b'Executive AI Insights', prediction_page)
         self.assertNotIn(b'Ringkasan Eksekutif Inventori &amp; Pengadaan', prediction_page)
         self.assertNotIn(b'refresh_ai', prediction_page)
+        self.assertIn(b'Selisih prediksi dalam persen (makin kecil makin akurat)', prediction_page)
+        self.assertIn(b'Rata-rata melesetnya jumlah unit barang', prediction_page)
+        self.assertIn(b'Tingkat penyimpangan saat terjadi selisih besar', prediction_page)
+        self.assertNotIn(b'rerata galat persentase', prediction_page)
+        self.assertNotIn(b'rerata galat absolut', prediction_page)
+        self.assertNotIn(b'akar rerata kuadrat galat', prediction_page)
         token_match = re.search(rb'name="csrf_token" value="([^"]+)"', self.client.get('/barang').data)
         csrf = token_match.group(1).decode()
         created = self.client.post('/barang', data={
