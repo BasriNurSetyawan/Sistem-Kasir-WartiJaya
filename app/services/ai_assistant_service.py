@@ -11,13 +11,14 @@ from app.repositories import barang_repository, belanja_repository, transaksi_re
 from app.services import local_nlu_service, prediksi_service, rekap_service
 from algorithm.anomaly_detector import detect_sales_anomalies, detect_transaction_anomalies
 from algorithm.market_basket import analyze_market_baskets, get_cross_sell_suggestions
-from algorithm.product_clustering import cluster_products
 
 logger = logging.getLogger(__name__)
 
 
 def get_product_clustering_data():
     """Cluster store products based on sales velocity, turnover, and revenue using K-Means."""
+    from algorithm.product_clustering import cluster_products
+
     today = business_today()
     plan = prediksi_service.restock_plan(today)
     all_items_map = {item.id: float(item.harga) for item in barang_repository.list_all_items()}

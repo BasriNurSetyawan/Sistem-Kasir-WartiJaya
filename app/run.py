@@ -7,4 +7,9 @@ from app import create_app
 app = create_app()
 
 if __name__ == '__main__':
-    serve(app, host='0.0.0.0', port=int(os.environ.get('PORT', '7860')))
+    port = int(os.environ.get('PORT', '7860'))
+    print(
+        f'Server siap! Buka http://127.0.0.1:{port} (Tekan Ctrl+C untuk berhenti)',
+        flush=True,
+    )
+    serve(app, host='0.0.0.0', port=port)

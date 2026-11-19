@@ -8,7 +8,6 @@ Provides:
 """
 
 from decimal import Decimal
-from algorithm.local_nlu import get_local_nlu_engine
 
 
 def generate_executive_insights(metrics):
@@ -83,6 +82,8 @@ def ask_copilot(query, conversation_history, store_context):
     Returns:
         dict: {'reply': str, 'sumber': 'local_nlu'}
     """
+    from algorithm.local_nlu import get_local_nlu_engine
+
     engine = get_local_nlu_engine()
     reply_text = engine.generate_response(query, store_context)
 
