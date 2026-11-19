@@ -20,15 +20,10 @@ Gunakan Python 3.10 atau lebih baru. Dari direktori akar proyek:
 py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 Copy-Item .env.example .env
-# Ganti SECRET_KEY, API_TOKEN, dan BOOTSTRAP_ADMIN_PASSWORD di .env dengan nilai acak yang kuat.
 py -3 -m pip install -r requirements.txt
 py -3 -m flask --app app.run db upgrade
 py -3 -m app.run
 ```
-
-API tersedia di `http://localhost:7860/api`. Semua endpoint memerlukan header `Authorization: Bearer <API_TOKEN>`. `SECRET_KEY` dan `API_TOKEN` wajib disetel melalui environment; jangan simpan rahasia sebenarnya di Git.
-
-UI tersedia di `http://localhost:7860/` dan memakai login username/kata sandi. Akun admin awal dibuat dari `BOOTSTRAP_ADMIN_USERNAME` dan `BOOTSTRAP_ADMIN_PASSWORD` saat bootstrap; password hash disimpan di database dan kredensial awal lokal ada di `.env`. Admin dapat membuat atau menonaktifkan akun serta mengelola katalog. Kasir dapat melihat data dan mencatat transaksi, tetapi tidak dapat mengubah katalog atau akun.
 
 ## Struktur aplikasi
 
@@ -82,16 +77,6 @@ Semua endpoint memakai awalan `/api`.
 
 Harga dikirim sebagai angka dan disimpan dengan presisi dua desimal. Rekap penghasilan menghitung omzet kotor (harga jual × jumlah terjual), bukan laba setelah modal dan biaya. Rekap harian secara default hanya menampilkan hari ini; rentang maksimal 366 hari. Setiap transaksi menyimpan snapshot harga satuan, sehingga perubahan harga barang tidak mengubah penghasilan transaksi yang sudah tercatat.
 
-Contoh membuat barang:
-
-```json
-{
-  "nama_barang": "Kopi",
-  "stok": 20,
-  "harga": 15000
-}
-```
-
 ## Catatan konfigurasi
 
 - `SECRET_KEY`: rahasia aplikasi minimal 32 karakter, wajib disediakan melalui environment.
@@ -109,9 +94,3 @@ Contoh membuat barang:
 - Lapisan keputusan menghitung buffer adaptif dari persentil ke-75 galat underforecast pada tujuh jendela backtest terbaru; buffer aktif setelah tersedia minimal tujuh jendela. Target stok adalah ramalan tujuh hari ditambah buffer, dan jumlah restok adalah maksimum nol dari target dikurangi stok saat ini. Risiko tinggi berarti stok di bawah ramalan; sedang berarti stok berada antara ramalan dan target; rendah berarti stok memenuhi target. Aturan ini merupakan heuristik berbasis data, bukan jaminan service level. Kasus dengan histori tidak memadai diberi penanda untuk tinjauan manual.
 - Prediksi tidak memperhitungkan waktu tunggu pemasok, promosi, hari toko tutup, atau permintaan yang tidak tercatat ketika stok habis. Barang tanpa transaksi dalam 120 hari terakhir ditandai untuk evaluasi manual. Data pembelian yang diimpor tersimpan pada ledger terpisah dan tidak otomatis menambah stok katalog. Hasil ML perlu divalidasi pada histori operasional; keberadaan estimator tidak menjamin prediksi selalu lebih baik.
 - Saat migrasi pertama, transaksi lama diberi snapshot harga barang yang berlaku sekarang. Karena harga historis belum tersimpan sebelumnya, penghasilan sebelum migrasi merupakan estimasi memakai harga barang saat migrasi, bukan rekonstruksi harga saat transaksi.
-
-## Pengujian
-
-Jalankan tes API dengan `py -3 -m unittest discover -s tests`.
-
-Untuk memasukkan workbook nota belanja, jalankan `py -3 -m scripts.import_rekap_belanja "D:\metopen\Data\Rekap_Nota_Belanja_Gabungan-v9.xlsx"`. Migrasi membuat ledger belanja yang terpisah dari penjualan. Import mempertahankan baris sumber, termasuk baris yang ditandai kemungkinan duplikat, dan aman dijalankan ulang untuk file yang sama.
