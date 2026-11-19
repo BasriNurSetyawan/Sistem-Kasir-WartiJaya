@@ -5,31 +5,9 @@
   <div>
     <span class="eyebrow">HYBRID RETAIL AI &amp; PERENCANAAN STOK</span>
     <h1>Prediksi &amp; Rekomendasi Restok Cerdas</h1>
-    <p>Kombinasi Machine Learning lokal (Random Forest &amp; SES) serta penalaran bisnis Google Gemini AI.</p>
-  </div>
-  <div>
-    <a href="{{ url_for('ui.prediksi') }}?refresh_ai=1" class="button secondary small">↻ Perbarui Analisis AI</a>
+    <p>Analisis permintaan lokal memakai Random Forest dan Single Exponential Smoothing (SES).</p>
   </div>
 </div>
-
-{% if ai_insight and ai_insight.insight %}
-<section class="panel" style="border-left: 5px solid #13866c; background: #fafdfc;">
-  <div class="panel-heading" style="margin-bottom: 8px;">
-    <div>
-      <h2 style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 18px;">✨</span> Executive AI Insights (Toko Warti Jaya)
-      </h2>
-      <p>Analisis kondisi inventori dan saran alokasi modal berbasis kecerdasan buatan.</p>
-    </div>
-    <span class="status-pill {% if ai_insight.sumber == 'gemini' %}success{% else %}warning{% endif %}" style="font-size: 11px;">
-      {{ 'Didukung Google Gemini' if ai_insight.sumber == 'gemini' else 'Analisis Mesin Lokal' }}
-    </span>
-  </div>
-  <div style="font-size: 13px; line-height: 1.6; color: #2c3f44; white-space: pre-line;">
-    {{ ai_insight.insight }}
-  </div>
-</section>
-{% endif %}
 
 {% if plan %}
 <section class="stat-grid" style="grid-template-columns: repeat(6, minmax(0, 1fr));">

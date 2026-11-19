@@ -201,223 +201,157 @@ class LocalNLUEngine:
     # -------------------------------------------------------------------------
 
     def _build_product_dossier_response(self, item, ctx):
-        nama = item.get('nama_barang', 'Produk')
-        stok = item.get('stok_saat_ini', item.get('stok', 0))
-        harga = item.get('harga', 0)
-        terjual_28 = item.get('total_terjual_28_hari', item.get('terjual', 0))
-        prediksi_7 = item.get('prediksi_penjualan', '-')
-        rekomendasi = item.get('rekomendasi_restock', 0)
-        sisa_hari = item.get('hari_habis_stok')
-        tier = item.get('label_prioritas', item.get('tier_prioritas', 'Stok Terpantau'))
-        metode = item.get('metode_peramalan', 'Random Forest / SES')
+        name = item.get('nama_barang', 'produk ini')
+        stock = item.get('stok_saat_ini', item.get('stok', 0))
+        price = item.get('harga', 0)
+        sold = item.get('total_terjual_28_hari', item.get('terjual', 0))
+        forecast = item.get('prediksi_penjualan', '-')
+        restock = item.get('rekomendasi_restock', 0)
+        runout = item.get('hari_habis_stok')
+        model = item.get('metode_peramalan', 'model lokal')
 
-        lines = [
-            f"### 📦 Profil Analisis Produk: **{nama}**",
-            f"- **Stok Saat Ini**: **{stok} unit**",
-            f"- **Harga Jual Satuan**: Rp {harga:,.2f}" if isinstance(harga, (int, float, Decimal)) else f"- **Harga Satuan**: Rp {harga}",
-            f"- **Realisasi Penjualan (28 Hari)**: **{terjual_28} unit**",
-            f"- **Prediksi Permintaan (7 Hari ke Depan)**: **{prediksi_7} unit** *(Metode: {metode})*",
-        ]
-
-        if sisa_hari is not None:
-            lines.append(f"- **Ketahanan Stok**: Diperkirakan bertahan sekitar **{sisa_hari} hari** ke depan.")
-        if rekomendasi and int(rekomendasi) > 0:
-            modal = item.get('estimasi_modal_restok', '0.00')
-            lines.append(f"- ⚠️ **Saran Restok**: Disarankan memesan **{rekomendasi} unit** (Estimasi modal: Rp {modal}). Status: **{tier}**.")
+        if isinstance(price, (int, float, Decimal)):
+            price_text = f'Rp {price:,.2f}'
         else:
-            lines.append(f"- ✅ **Status Stok**: Stok saat ini mencukupi target kebutuhan operasional.")
-
-        return "\n".join(lines)
+            price_text = f'Rp {price}'
+        answer = (
+            f'{name} saat ini memiliki stok {stock} unit dengan harga jual {price_text}. '
+            f'Dalam 28 hari terakhir, barang ini terjual {sold} unit dan perkiraan penjualan '
+            f'untuk tujuh hari ke depan adalah {forecast} unit berdasarkan {model}.'
+        )
+        if runout is not None:
+            answer += f' Dengan laju penjualan sekarang, stok diperkirakan bertahan sekitar {runout} hari.'
+        if restock and int(restock) > 0:
+            cost = item.get('estimasi_modal_restok', '0.00')
+            answer += f' Saya sarankan menambah {restock} unit dengan perkiraan biaya Rp {cost}.'
+        else:
+            answer += ' Stoknya masih cukup untuk target operasional saat ini.'
+        return answer
 
     def _build_critical_stock_response(self, ctx):
-        kritis = ctx.get('barang_kritis', [])
-        total_restok = ctx.get('total_barang_restok', len(kritis))
-        anggaran = ctx.get('estimasi_biaya_restok', '0')
+        critical = ctx.get('barang_kritis', [])
+        if not critical:
+            return 'Untuk saat ini stok barang masih cukup. Belum ada barang yang diperkirakan habis dalam dua hari.'
 
-        if not kritis:
-            return (
-                "### ✅ Kondisi Stok Aman\n\n"
-                "Seluruh produk dalam katalog saat ini memiliki stok yang mencukupi untuk kebutuhan operasional beberapa hari ke depan. "
-                "Tidak ada produk dengan status rawan habis (kehabisan stok <= 2 hari)."
-            )
-
-        items_formatted = []
-        for b in kritis[:8]:
-            nama = b.get('nama_barang', 'Barang')
-            stok = b.get('stok_saat_ini', b.get('stok', 0))
-            hari = b.get('hari_habis_stok', '< 2')
-            butuh = b.get('rekomendasi_restock', '-')
-            items_formatted.append(f"- 🔴 **{nama}**: Sisa **{stok} unit** (habis dalam ~{hari} hari). Saran restok: **{butuh} unit**.")
-
-        return (
-            f"### ⚠️ Peringatan Stok Kritis ({len(kritis)} Produk)\n\n"
-            f"Sistem mendeteksi **{len(kritis)} produk** yang berisiko habis dalam 1–2 hari ke depan dan harus diprioritaskan pembelanjaannya:\n\n"
-            + "\n".join(items_formatted) +
-            f"\n\n💰 **Estimasi Kebutuhan Modal Restok**: **Rp {anggaran}** untuk mengembalikan persediaan ke level aman 7 hari."
-        )
+        names = []
+        for item in critical[:4]:
+            name = item.get('nama_barang', 'barang')
+            stock = item.get('stok_saat_ini', item.get('stok', 0))
+            days = item.get('hari_habis_stok')
+            detail = f'{name} dengan sisa {stock} unit'
+            if days is not None:
+                detail += f', diperkirakan habis dalam {days} hari'
+            names.append(detail)
+        answer = f'Ada {len(critical)} barang yang perlu segera diperhatikan: {"; ".join(names)}.'
+        if len(critical) > len(names):
+            answer += f' Masih ada {len(critical) - len(names)} barang kritis lainnya.'
+        budget = ctx.get('estimasi_biaya_restok')
+        if budget:
+            answer += f' Perkiraan biaya untuk memenuhi kebutuhan restok adalah Rp {budget}.'
+        return answer
 
     def _build_today_sales_response(self, ctx):
-        tx_cnt = ctx.get('penjualan_hari_ini_transaksi', 0)
-        unit_cnt = ctx.get('penjualan_hari_ini_unit', 0)
-        omzet = ctx.get('penjualan_hari_ini_omzet', '0')
-        tgl = ctx.get('tanggal', 'Hari ini')
-
+        date_text = ctx.get('tanggal', 'hari ini')
+        transactions = ctx.get('penjualan_hari_ini_transaksi', 0)
+        units = ctx.get('penjualan_hari_ini_unit', 0)
+        revenue = ctx.get('penjualan_hari_ini_omzet', '0')
         return (
-            f"### 📊 Ringkasan Penjualan Hari Ini ({tgl})\n\n"
-            f"- **Jumlah Transaksi Struk**: **{tx_cnt} transaksi**\n"
-            f"- **Total Unit Barang Terjual**: **{unit_cnt} item/unit**\n"
-            f"- **Total Omzet Kotor Terkumpul**: **Rp {omzet}**\n\n"
-            f"💡 *Catatan: Data diperbarui secara real-time dari tabel transaksi kasir POS.*"
+            f'Pada {date_text}, toko mencatat {transactions} transaksi dengan total {units} unit terjual. '
+            f'Omzet kotornya Rp {revenue}.'
         )
 
     def _build_top_seller_response(self, ctx):
-        top = ctx.get('top_seller', [])
-        if not top:
-            return "Belum ada rekaman transaksi penjualan yang mencukupi dalam 28 hari terakhir untuk menampilkan produk terlaris."
-
-        rows = []
-        for i, b in enumerate(top[:7]):
-            nama = b.get('nama_barang', '')
-            qty = b.get('terjual', 0)
-            rows.append(f"{i+1}. 🏆 **{nama}** — **{qty} unit terjual**")
-
-        return (
-            f"### ⭐ Produk Terlaris (28 Hari Terakhir)\n\n"
-            + "\n".join(rows) +
-            f"\n\n💡 *Rekomendasi:* Pertahankan ketersediaan barang-barang ini dengan buffer stok yang cukup karena merupakan kontributor utama perputaran kas."
-        )
+        top_items = ctx.get('top_seller', [])
+        if not top_items:
+            return 'Belum ada penjualan yang tercatat dalam 28 hari terakhir, jadi saya belum bisa menentukan barang terlaris.'
+        names = [
+            f"{item.get('nama_barang', 'barang')} sebanyak {item.get('terjual', 0)} unit"
+            for item in top_items[:4]
+        ]
+        return f"Barang yang paling banyak terjual dalam 28 hari terakhir adalah {', '.join(names)}."
 
     def _build_dead_stock_response(self, ctx):
-        dead = ctx.get('barang_dead_stock', [])
-        if not dead:
-            return (
-                "### 📦 Status Stok Mengendap (Dead Stock)\n\n"
-                "Kabar baik! Tidak ditemukan produk mati/mengendap tanpa transaksi dalam 28 hari terakhir. "
-                "Perputaran barang berjalan dengan baik."
-            )
-
-        items_str = "\n".join(
-            f"- **{b.get('nama_barang')}**: stok mengendap **{b.get('stok_saat_ini', b.get('stok', 0))} unit**"
-            for b in dead[:6]
-        )
-        return (
-            f"### 📦 Evaluasi Barang Mengendap ({len(dead)} Produk)\n\n"
-            f"Berikut produk yang memiliki stok tetapi tidak mencatat transaksi penjualan selama 28 hari terakhir:\n\n"
-            f"{items_str}\n\n"
-            f"💡 *Saran Tindakan:* Pertimbangkan membuat paket hemat/bundling dengan produk fast-moving atau memberikan diskon cuci gudang agar modal tidak macet."
-        )
+        dead_items = ctx.get('barang_dead_stock', [])
+        if not dead_items:
+            return 'Tidak ada barang bersisa stok yang terdeteksi tanpa penjualan selama 28 hari terakhir.'
+        names = [
+            f"{item.get('nama_barang', 'barang')} dengan stok {item.get('stok_saat_ini', item.get('stok', 0))} unit"
+            for item in dead_items[:4]
+        ]
+        answer = f"Beberapa barang belum terjual selama 28 hari terakhir: {', '.join(names)}."
+        answer += ' Coba evaluasi harga, penempatan barang, atau tawarkan bersama barang yang lebih laris.'
+        return answer
 
     def _build_bundling_response(self, ctx):
-        popular_pairs = ctx.get('popular_pairs', [])
-        if not popular_pairs:
-            return (
-                "### 💡 Analisis Keranjang Belanja (Market Basket)\n\n"
-                "Belum cukup data transaksi multi-barang di POS untuk membentuk aturan asosiasi belanja. "
-                "Gunakan form kasir dengan menambahkan beberapa barang sekaligus per transaksi struk untuk mengaktifkan fitur ini."
-            )
-
-        top_pair = popular_pairs[0]
-        a_nama = top_pair.get('item_a_nama')
-        b_nama = top_pair.get('item_b_nama')
-        freq = top_pair.get('frekuensi')
-        lift = top_pair.get('lift')
-
+        pairs = ctx.get('popular_pairs', [])
+        if not pairs:
+            return 'Belum ada cukup transaksi beberapa barang dalam satu struk untuk melihat pola belanja bersama.'
+        pair = pairs[0]
+        name_a = pair.get('item_a_nama', 'barang pertama')
+        name_b = pair.get('item_b_nama', 'barang kedua')
+        frequency = pair.get('frekuensi', 0)
         return (
-            f"### 💡 Rekomendasi Paket Bundling & Penempatan Kasir\n\n"
-            f"Berdasarkan algoritma *Association Rule Mining* pada struk kasir:\n\n"
-            f"1. **Paket Promo Duet:** Pasangkan **{a_nama}** + **{b_nama}** "
-            f"(dibeli bersamaan sebanyak **{freq} kali**, skor Lift: **{lift}**).\n"
-            f"2. **Strategi Tata Letak:** Letakkan produk pendamping di samping barang utama pada etalase kasir untuk memicu *impulse buying*."
+            f'{name_a} dan {name_b} paling sering tercatat bersama, sebanyak {frequency} kali. '
+            'Keduanya bisa dipertimbangkan untuk ditawarkan sebagai paket atau ditempatkan berdekatan.'
         )
 
     def _build_clustering_response(self, ctx):
-        cluster_info = ctx.get('clustering_info', {})
-        if not cluster_info or cluster_info.get('status') == 'data_kosong':
-            return (
-                "### 🧩 Segmentasi Produk K-Means\n\n"
-                "Sistem mengelompokkan katalog menjadi 3 segmen: **Fast-Moving**, **Stabil**, dan **Slow-Moving** "
-                "berdasarkan kecepatan penjualan, rasio perputaran persediaan, dan kontribusi pendapatan 28 hari."
-            )
-
-        summary = cluster_info.get('ringkasan_klaster', {})
-        fm = summary.get('FAST_MOVING', {})
-        stb = summary.get('STABIL', {})
-        sm = summary.get('SLOW_MOVING', {})
-
-        return (
-            f"### 🧩 Hasil Segmentasi Produk (K-Means Clustering)\n\n"
-            f"- 🚀 **Fast-Moving ({fm.get('jumlah_produk', 0)} Produk)**: Produk perputaran cepat & omzet tertinggi. *Strategi:* Jaga persediaan pengaman.\n"
-            f"- ⚖️ **Stabil ({stb.get('jumlah_produk', 0)} Produk)**: Penjualan reguler konsisten. *Strategi:* Restok berkala terjadwal.\n"
-            f"- 🐌 **Slow-Moving ({sm.get('jumlah_produk', 0)} Produk)**: Perputaran rendah. *Strategi:* Bundling promo & evaluasi kuantitas pengadaan."
-        )
+        info = ctx.get('clustering_info', {})
+        if not info or info.get('status') == 'data_kosong':
+            return 'Belum ada data barang yang cukup untuk mengelompokkan produk berdasarkan pergerakan penjualannya.'
+        summary = info.get('ringkasan_klaster', {})
+        fast = summary.get('FAST_MOVING', {}).get('jumlah_produk', 0)
+        stable = summary.get('STABIL', {}).get('jumlah_produk', 0)
+        slow = summary.get('SLOW_MOVING', {}).get('jumlah_produk', 0)
+        dead = summary.get('DEAD_STOCK', {}).get('jumlah_produk', 0)
+        answer = f'Pengelompokan saat ini mencatat {fast} barang laris, {stable} barang dengan penjualan stabil, dan {slow} barang lambat terjual.'
+        if dead:
+            answer += f' Ada juga {dead} barang tanpa penjualan yang perlu ditinjau.'
+        return answer
 
     def _build_evaluation_metrics_response(self, ctx):
-        mape = ctx.get('mape_gabungan', '-')
-        mae = ctx.get('mae_gabungan', '-')
-        rmse = ctx.get('rmse_gabungan', '-')
-        ml_count = ctx.get('jumlah_model_ml_digunakan', 0)
-        ses_count = ctx.get('jumlah_fallback_ses', 0)
-
-        return (
-            f"### 📈 Bukti Evaluasi Empiris Model Peramalan (Bab IV Skripsi)\n\n"
-            f"- **Mean Absolute Percentage Error (MAPE)**: **{mape}%**\n"
-            f"- **Mean Absolute Error (MAE)**: **{mae} unit**\n"
-            f"- **Root Mean Squared Error (RMSE)**: **{rmse} unit**\n\n"
-            f"**Komposisi Model Terpilih:**\n"
-            f"- Random Forest Regressor (unggul atas baseline): **{ml_count} produk**\n"
-            f"- Single Exponential Smoothing (SES baseline): **{ses_count} produk**\n\n"
-            f"Evaluasi dihitung secara ketat melalui metode *rolling-origin backtest* dan *chronological cross-validation* tanpa pengacakan waktu."
-        )
+        mape = ctx.get('mape_gabungan')
+        mae = ctx.get('mae_gabungan')
+        rmse = ctx.get('rmse_gabungan')
+        if mape is None and mae is None and rmse is None:
+            return 'Data penjualan saat ini belum cukup untuk menghitung hasil evaluasi model peramalan.'
+        details = []
+        if mape is not None:
+            details.append(f'MAPE {mape} persen')
+        if mae is not None:
+            details.append(f'MAE {mae} unit')
+        if rmse is not None:
+            details.append(f'RMSE {rmse} unit')
+        return f'Hasil evaluasi peramalan yang tersedia adalah {", ".join(details)}.'
 
     def _build_budget_response(self, ctx):
-        anggaran = ctx.get('estimasi_biaya_restok', '0')
-        kritis = len(ctx.get('barang_kritis', []))
-        total_restok = ctx.get('total_barang_restok', 0)
-
+        budget = ctx.get('estimasi_biaya_restok', '0')
+        restock_count = ctx.get('total_barang_restok', 0)
+        critical_count = len(ctx.get('barang_kritis', []))
         return (
-            f"### 💰 Alokasi Anggaran Belanja Restok\n\n"
-            f"- **Total Kebutuhan Modal Restok**: **Rp {anggaran}**\n"
-            f"- **Jumlah Barang Perlu Restok**: **{total_restok} jenis**\n"
-            f"- **Prioritas Kritis Mendesak**: **{kritis} jenis barang**\n\n"
-            f"💡 *Saran Finansial:* Alokasikan anggaran terlebih dahulu pada barang dengan prioritas **P1_KRITIS** "
-            f"agar modal operasional berputar optimal dan tidak terjadi kehilangan omzet harian."
+            f'Perkiraan modal restok saat ini Rp {budget} untuk {restock_count} jenis barang. '
+            f'Dari jumlah itu, {critical_count} barang masuk prioritas kritis.'
         )
 
     def _build_anomaly_response(self, ctx):
         anomalies = ctx.get('anomalies', [])
         if not anomalies:
-            return (
-                "### 🔍 Status Deteksi Anomali\n\n"
-                "Sistem tidak mendeteksi anomali kritis pada pergerakan stok maupun transaksi kasir saat ini. "
-                "Operasional toko berjalan dalam batas variasi normal."
-            )
-
-        items_str = "\n".join(
-            f"- [{a.get('keparahan', 'info').upper()}] **{a.get('nama_barang', 'Produk')}**: {a.get('pesan')}"
-            for a in anomalies[:5]
-        )
-        return (
-            f"### 🔍 Laporan Deteksi Anomali Toko ({len(anomalies)} Temuan)\n\n"
-            f"{items_str}\n\n"
-            f"💡 *Deteksi didukung oleh Heuristik Lonjakan Penjualan, Kehabisan Stok, dan Isolation Forest.*"
-        )
+            return 'Saya belum menemukan perubahan stok atau transaksi yang perlu diperiksa saat ini.'
+        descriptions = [
+            f"{item.get('nama_barang', 'transaksi')} ({item.get('keparahan', 'informasi')}): {item.get('pesan', 'perlu diperiksa')}"
+            for item in anomalies[:3]
+        ]
+        answer = f'Ada {len(anomalies)} temuan yang perlu diperhatikan. ' + ' '.join(descriptions)
+        if len(anomalies) > len(descriptions):
+            answer += f' Masih ada {len(anomalies) - len(descriptions)} temuan lainnya.'
+        return answer
 
     def _build_help_response(self, ctx):
-        total_barang = ctx.get('total_barang', 0)
-        omzet = ctx.get('penjualan_hari_ini_omzet', '0')
-
+        count = ctx.get('total_barang', 0)
+        revenue = ctx.get('penjualan_hari_ini_omzet', '0')
         return (
-            f"Halo! Saya Asisten AI Cerdas Toko Warti Jaya (100% Local Machine Learning & NLU).\n\n"
-            f"Saat ini terdaftar **{total_barang} produk** dalam katalog toko dengan omzet hari ini **Rp {omzet}**.\n\n"
-            f"Anda dapat menanyakan hal-hal seputar operasional toko kepada saya, seperti:\n"
-            f"- *'Barang apa yang stoknya hampir habis?'*\n"
-            f"- *'Berapa penjualan dan omzet hari ini?'*\n"
-            f"- *'Apa saja produk paling laris?'*\n"
-            f"- *'Barang apa yang termasuk dead stock?'*\n"
-            f"- *'Ada rekomendasi paket bundling promo?'*\n"
-            f"- *'Bagaimana hasil pengelompokan produk K-Means?'*\n"
-            f"- *'Berapa akurasi model MAPE, MAE, dan RMSE?'*\n"
-            f"- *'Cek stok [Nama Barang]'* (misal: *Cek stok Beras*)"
+            f'Halo, saya bisa membantu memeriksa stok dari {count} jenis barang dan omzet hari ini sebesar Rp {revenue}. '
+            'Silakan tanyakan stok barang tertentu, penjualan hari ini, barang terlaris, kebutuhan restok, atau pola belanja pelanggan.'
         )
 
 

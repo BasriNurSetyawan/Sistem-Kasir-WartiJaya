@@ -9,6 +9,7 @@ from app.business_time import business_today
 from app.models import AIChatMessage, AIInsight, Barang
 from app.repositories import barang_repository, belanja_repository, transaksi_repository
 from app.services import local_nlu_service, prediksi_service, rekap_service
+from app.services.ai_response import SYSTEM_INSTRUCTION, clean_response
 from algorithm.anomaly_detector import detect_sales_anomalies, detect_transaction_anomalies
 from algorithm.market_basket import analyze_market_baskets, get_cross_sell_suggestions
 
@@ -105,7 +106,7 @@ def get_or_generate_inventory_insight(force_refresh=False):
         )
         if recent:
             return {
-                'insight': recent.konten,
+                'insight': clean_response(recent.konten),
                 'sumber': recent.sumber,
                 'dibuat_pada': recent.dibuat_pada.isoformat(),
             }
@@ -124,6 +125,7 @@ def get_or_generate_inventory_insight(force_refresh=False):
     }
 
     result = local_nlu_service.generate_executive_insights(metrics)
+    result['insight'] = clean_response(result.get('insight'))
 
     # Persist insight
     insight_record = AIInsight(
@@ -172,7 +174,10 @@ def handle_chat_message(user_id, message_text):
     store_context = get_live_store_context()
 
     # Query Local NLU engine
-    ai_resp = local_nlu_service.ask_copilot(clean_text, history, store_context)
+    ai_resp = local_nlu_service.ask_copilot(
+        clean_text, history, store_context, system_instruction=SYSTEM_INSTRUCTION
+    )
+    ai_resp['reply'] = clean_response(ai_resp.get('reply'))
 
     # Save assistant response
     assistant_msg = AIChatMessage(
@@ -205,7 +210,7 @@ def get_chat_history(limit=20, user_id=None):
         {
             'id': r.id,
             'role': r.role,
-            'pesan': r.pesan,
+            'pesan': clean_response(r.pesan) if r.role == 'assistant' else r.pesan,
             'sumber': r.sumber,
             'dibuat_pada': r.dibuat_pada.isoformat(),
         }
@@ -227,7 +232,7 @@ def get_market_basket_data():
 
     return {
         **basket_results,
-        'ai_rekomendasi_bundling': advice_info['advice'],
+        'ai_rekomendasi_bundling': clean_response(advice_info['advice']),
         'sumber_ai': advice_info['sumber'],
     }
 

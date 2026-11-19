@@ -236,7 +236,7 @@
       <div class="ai-avatar">✨</div>
       <div>
         <b style="font-size:13px; display:block;">Asisten AI Toko Warti Jaya</b>
-        <small style="opacity:0.85; font-size:10px;">Didukung Google Gemini &amp; Retail ML</small>
+        <small style="opacity:0.85; font-size:10px;">Asisten lokal untuk operasional toko</small>
       </div>
     </div>
     <button id="aiCloseBtn" class="ai-close-btn" type="button">&times;</button>
@@ -302,7 +302,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (role !== 'user' && source) {
       const tag = document.createElement('span');
       tag.className = 'ai-source-tag';
-      tag.textContent = source === 'gemini' ? '✨ Didukung Google Gemini' : '⚡ Analisis Mesin Lokal';
+      tag.textContent = 'Asisten lokal';
       div.appendChild(tag);
     }
     msgContainer.appendChild(div);
@@ -317,7 +317,7 @@ document.addEventListener('DOMContentLoaded', function () {
     .then(data => {
       historyLoaded = true;
       if (data.messages && data.messages.length > 0) {
-        msgContainer.innerHTML = '';
+        msgContainer.replaceChildren();
         data.messages.forEach(m => {
           appendMessage(m.pesan, m.role, m.sumber);
         });

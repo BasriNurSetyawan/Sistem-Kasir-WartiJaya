@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -13,6 +14,7 @@ from algorithm.retail_optimizer import calculate_restock_priority
 from algorithm.ses import peramalkan_ses
 from algorithm.ml_forecast import peramalkan_random_forest
 from app.services import ai_assistant_service, local_nlu_service
+from app.services.ai_response import SYSTEM_INSTRUCTION, clean_response
 
 
 class RetailAlgorithmsTestCase(unittest.TestCase):
@@ -126,6 +128,12 @@ class RetailAlgorithmsTestCase(unittest.TestCase):
 
 
 class LocalNLUServiceAndAiTestCase(unittest.TestCase):
+    def test_response_cleaner_removes_markdown_and_decorative_emoji(self):
+        cleaned = clean_response('### Halo **Pak** 👋\n\n- Silakan lihat `stok` __hari ini__.')
+        self.assertEqual(cleaned, 'Halo Pak\n\nSilakan lihat stok hari ini.')
+        self.assertNotRegex(cleaned, r'[#*_`]|--')
+        self.assertIn('bahasa Indonesia', SYSTEM_INSTRUCTION)
+
     @classmethod
     def setUpClass(cls):
         cls.temp_dir = Path(__file__).resolve().parents[1] / '.test_ai_tmp'
@@ -183,12 +191,14 @@ class LocalNLUServiceAndAiTestCase(unittest.TestCase):
         resp = engine.generate_response("Bagaimana stok Beras Premium 5kg?", ctx)
         self.assertIn('Beras Premium 5kg', resp)
         self.assertIn('3 unit', resp)
+        self.assertNotRegex(resp, r'[#*_`]|--')
 
     def test_ai_api_insights_restok_endpoint(self):
         response = self.client.get('/api/ai/insights/restok', headers=self.headers)
         self.assertEqual(response.status_code, 200)
         self.assertIn('insight', response.json)
         self.assertEqual(response.json['sumber'], 'local_ml')
+        self.assertNotRegex(response.json['insight'], r'[#*_`]|--')
 
     def test_ai_api_chat_endpoint(self):
         response = self.client.post('/api/ai/chat', headers=self.headers, json={
@@ -197,6 +207,7 @@ class LocalNLUServiceAndAiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('reply', response.json)
         self.assertEqual(response.json['source'], 'local_nlu')
+        self.assertNotRegex(response.json['reply'], r'[#*_`]|--')
 
         # Verify chat history endpoint returns stored message
         hist_resp = self.client.get('/api/ai/chat/history', headers=self.headers)
@@ -204,11 +215,21 @@ class LocalNLUServiceAndAiTestCase(unittest.TestCase):
         messages = hist_resp.json['messages']
         self.assertGreaterEqual(len(messages), 2)  # 1 user + 1 assistant
 
+    def test_ai_chat_endpoint_sanitizes_provider_output(self):
+        with patch(
+            'app.routes.ai.ai_assistant_service.handle_chat_message',
+            return_value={'reply': '### Halo **Pak** 👋\n\n- Cek `stok` __hari ini__.', 'source': 'local_nlu'},
+        ):
+            response = self.client.post('/api/ai/chat', headers=self.headers, json={'message': 'Halo'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['reply'], 'Halo Pak\n\nCek stok hari ini.')
+
     def test_ai_api_basket_and_anomali_endpoints(self):
         # Basket analysis
         basket_resp = self.client.get('/api/ai/basket-analysis', headers=self.headers)
         self.assertEqual(basket_resp.status_code, 200)
         self.assertIn('aturan_asosiasi', basket_resp.json)
+        self.assertNotRegex(basket_resp.json['ai_rekomendasi_bundling'], r'[#*_`]|--')
 
         # Cross sell
         cs_resp = self.client.post('/api/ai/cross-sell', headers=self.headers, json={

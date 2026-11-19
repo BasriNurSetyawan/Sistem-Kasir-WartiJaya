@@ -387,16 +387,12 @@ def belanja():
 def prediksi():
     try:
         plan = restock_plan(business_today())
-        ai_insight = ai_assistant_service.get_or_generate_inventory_insight(
-            force_refresh=(request.args.get('refresh_ai') == '1')
-        )
         basket_data = ai_assistant_service.get_market_basket_data()
         anomalies = ai_assistant_service.get_store_anomalies()
         clustering_data = ai_assistant_service.get_product_clustering_data()
     except SQLAlchemyError:
         current_app.logger.exception('Gagal menghitung rekomendasi restok melalui UI')
         plan = None
-        ai_insight = None
         basket_data = None
         anomalies = []
         clustering_data = None
@@ -404,7 +400,6 @@ def prediksi():
     return render_template(
         'prediksi.html',
         plan=plan,
-        ai_insight=ai_insight,
         basket_data=basket_data,
         anomalies=anomalies,
         clustering_data=clustering_data,

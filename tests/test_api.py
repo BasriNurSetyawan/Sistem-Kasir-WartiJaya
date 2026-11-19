@@ -466,7 +466,11 @@ class ApiTestCase(unittest.TestCase):
             page = self.client.get(path)
             self.assertEqual(page.status_code, 200, path)
             self.assertIn(b'Toko Warti Jaya', page.data, path)
-        self.assertNotIn(b'name="alpha"', self.client.get('/prediksi').data)
+        prediction_page = self.client.get('/prediksi').data
+        self.assertNotIn(b'name="alpha"', prediction_page)
+        self.assertNotIn(b'Executive AI Insights', prediction_page)
+        self.assertNotIn(b'Ringkasan Eksekutif Inventori &amp; Pengadaan', prediction_page)
+        self.assertNotIn(b'refresh_ai', prediction_page)
         token_match = re.search(rb'name="csrf_token" value="([^"]+)"', self.client.get('/barang').data)
         csrf = token_match.group(1).decode()
         created = self.client.post('/barang', data={
